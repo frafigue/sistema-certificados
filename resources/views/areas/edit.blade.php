@@ -10,7 +10,7 @@
             @csrf
             @method('PUT')
             <div class="form-group">
-                <label for="nombre">Nombre del Área.</label>
+                <label for="nombre">Nombre del Área</label>
                 <input type="text" name="nombre" class="form-control" value="{{ $area->nombre }}" required>
             </div>
             <div class="form-group">
