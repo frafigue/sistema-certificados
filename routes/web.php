@@ -14,6 +14,7 @@ use App\Http\Controllers\PersonProfileController;
 use App\Http\Controllers\ConsultaPublicaController;
 use App\Http\Controllers\UnifiedImportController;
 use App\Http\Controllers\CertificateExcelGeneratorController;
+use App\Http\Controllers\ImportHistoryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -94,13 +95,25 @@ Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | 🔥 NUEVO — BATCH STATUS (PROGRESO EN VIVO)
+    | NUEVO — BATCH STATUS (PROGRESO EN VIVO)
     |--------------------------------------------------------------------------
     */
 
     Route::get('/batch-status/{id}', [CertificateExcelGeneratorController::class, 'batchStatus'])
         ->name('batch.status');
 
+        /*
+    |--------------------------------------------------------------------------
+    | HISTORIAL DE IMPORTACIONES
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('import-history')->name('import-history.')->group(function () {
+        Route::get('/', [ImportHistoryController::class, 'index'])
+            ->name('index');
+        Route::get('/{importHistory}', [ImportHistoryController::class, 'show'])
+            ->name('show');
+    });
+    
     /*
     |--------------------------------------------------------------------------
     | ÁREAS, RESOLUCIONES, CURSOS
@@ -124,7 +137,8 @@ Route::middleware('auth')->group(function () {
     */
 
     Route::get('my-certificates', [CertificateController::class, 'myCertificates'])->name('certificates.my');
-    Route::get('certificates/{certificate}/download', [CertificateController::class, 'downloadPdf'])->name('certificates.download');
+    //Route::get('certificates/{certificate}/download', [CertificateController::class, 'downloadPdf'])->name('certificates.download');
+    
     Route::get('certificates/import/template', [CertificateController::class, 'downloadTemplate'])->name('certificates.template.download');
     Route::get('certificates/import', [CertificateController::class, 'showImportForm'])->name('certificates.import.form');
     Route::post('certificates/import', [CertificateController::class, 'import'])->name('certificates.import');
@@ -137,7 +151,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/certificates/send-pending', [CertificateController::class, 'sendPending'])
         ->name('certificates.sendPending')
         ->middleware('can:is-admin-or-root');
-
+    Route::get('certificates/{certificate}/download', [CertificateController::class, 'downloadPdf'])->name('certificates.download');
     Route::resource('certificates', CertificateController::class)->except(['show']);
 
     /*

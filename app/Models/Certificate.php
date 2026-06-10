@@ -5,12 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\ImportHistory;
 
 class Certificate extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'import_history_id',
         'course_id',
         'person_id',
         'condition', // 'Tipo de certificado'
@@ -85,5 +87,9 @@ class Certificate extends Model
         }
         
         return false;
+    }
+    public function importHistory(): BelongsTo
+    {
+        return $this->belongsTo(ImportHistory::class);
     }
 }

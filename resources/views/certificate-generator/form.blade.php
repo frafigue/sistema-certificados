@@ -26,6 +26,51 @@
             </div>
         @endif
 
+        @if(session('batch_id'))
+        <div class="card card-info mt-3" id="batchProgressCard">
+            <div class="card-header">
+                <h5 class="card-title">
+                    <i class="fas fa-sync-alt fa-spin"></i>
+                    Procesando certificados
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-3" style="height: 30px;">
+                    <div
+                        id="batchProgressBar"
+                        class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                        role="progressbar"
+                        style="width: 0%"
+                    >
+                        0%
+                    </div>
+                </div>
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <h4 id="jobsProcessed">0</h4>
+                        <small>Procesados</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h4 id="jobsPending">0</h4>
+                        <small>Pendientes</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h4 id="jobsFailed">0</h4>
+                        <small>Fallidos</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h4 id="jobsTotal">0</h4>
+                        <small>Total</small>
+                    </div>
+                </div>
+                <div class="alert alert-light mt-3 mb-0">
+                    <i class="fas fa-info-circle"></i>
+                    El progreso se actualiza automáticamente.
+                </div>
+            </div>
+        </div>
+        @endif
+
         @if(session('warning'))
             <div class="alert alert-warning alert-dismissible fade show">
                 <i class="fas fa-exclamation-triangle"></i> <strong>Atención!</strong> {{ session('warning') }}
@@ -358,11 +403,55 @@
 
                     <div class="text-center mt-3">
                         <button type="submit" class="btn btn-primary btn-lg px-5" id="uploadBtn">
+                            {{-- PROGRESO EN VIVO --}}
+                            <div id="batch-progress-container" class="mt-4 d-none">
+                                <div class="card card-info">
+                                    <div class="card-header">
+                                        <h5 class="card-title mb-0">
+                                            <i class="fas fa-spinner fa-spin"></i>
+                                            Procesando certificados...
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="progress mb-3" style="height: 30px;">
+                                            <div
+                                                id="batch-progress-bar"
+                                                class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                                role="progressbar"
+                                                style="width: 0%"
+                                            >
+                                                0%
+                                            </div>
+                                        </div>
+                                        <div class="row text-center">
+                                            <div class="col-md-3">
+                                                <h4 id="batch-total">0</h4>
+                                                <small>Total</small>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <h4 id="batch-processed">0</h4>
+                                                <small>Procesados</small>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <h4 id="batch-pending">0</h4>
+                                                <small>Pendientes</small>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <h4 id="batch-failed">0</h4>
+                                                <small>Errores</small>
+                                            </div>
+                                        </div>
+                                        <div class="alert alert-success mt-3 d-none" id="batch-finished-message">
+                                            <i class="fas fa-check-circle"></i>
+                                            ¡Proceso completado correctamente!
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <i class="fas fa-paper-plane"></i>
                             Subir Excel y Emitir Certificados
                         </button>
                     </div>
-
                 </form>
             </div>
         </div>
@@ -522,6 +611,11 @@
 @section('js')
 <script>
 $(document).ready(function () {
+    // =====================================================
+    // BATCH ID DESDE SESSION
+    // =====================================================
+    let batchId = @json(session('batch_id'));
+    let pollingInterval = null;
 
     $('.select2').select2({ theme: 'bootstrap4', width: '100%' });
 
@@ -721,7 +815,76 @@ $(document).ready(function () {
             .html('<i class="fas fa-paper-plane"></i> Subir Excel y Emitir Certificados')
             .prop('disabled', false);
     @endif
+    // =====================================================
+    // POLLING AJAX DEL BATCH
+    // =====================================================
 
+    function startBatchPolling(batchId)
+    {
+        if (!batchId) {
+            return;
+        }
+        console.log('Iniciando polling batch:', batchId);
+        $('#batch-progress-container').removeClass('d-none');
+        pollingInterval = setInterval(function () {
+            $.ajax({
+                url: '/batch-status/' + batchId,
+                method: 'GET',
+                success: function (response) {
+                    if (!response.success) {
+                        return;
+                    }
+                    const data = response.data;
+                    let progress  = data.progress ?? 0;
+                    let total     = data.total_jobs ?? 0;
+                    let processed = data.processed_jobs ?? 0;
+                    let pending   = data.pending_jobs ?? 0;
+                    let failed    = data.failed_jobs ?? 0;
+                    // =====================================
+                    // ACTUALIZAR BARRA
+                    // =====================================
+                    $('#batch-progress-bar')
+                        .css('width', progress + '%')
+                        .text(progress + '%');
+                    // =====================================
+                    // ACTUALIZAR STATS
+                    // =====================================
+                    $('#batch-total').text(total);
+                    $('#batch-processed').text(processed);
+                    $('#batch-pending').text(pending);
+                    $('#batch-failed').text(failed);
+                    // =====================================
+                    // FINALIZADO
+                    // =====================================
+                    if (data.finished === true) {
+                        clearInterval(pollingInterval);
+                        $('#batch-progress-bar')
+                            .removeClass('progress-bar-animated')
+                            .removeClass('progress-bar-striped');
+                        $('#batch-finished-message')
+                            .removeClass('d-none');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Proceso completado',
+                            text: 'Todos los certificados fueron procesados.',
+                            timer: 4000,
+                            showConfirmButton: false
+                        });
+                    }
+                },
+                error: function (xhr) {
+                    console.error(xhr);
+                }
+            });
+        }, 2000);
+    }
+    // =====================================================
+    // INICIAR POLLING SI EXISTE BATCH
+    // =====================================================
+
+    if (batchId) {
+        startBatchPolling(batchId);
+    }
 });
 </script>
 @stop

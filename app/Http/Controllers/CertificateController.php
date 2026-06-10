@@ -26,18 +26,33 @@ class CertificateController extends Controller
 {
     const CANVAS_W = 842;
     const CANVAS_H = 595;
-    const PDF_W = 1122;
-    const PDF_H = 793;
+    const PDF_W    = 1122;
+    const PDF_H    = 793;
+
+    // =========================================================================
+    // HELPERS PRIVADOS
+    // =========================================================================
+
+    private function pdfOptions(): array
+    {
+        return [
+            'dpi'                     => 96,
+            'defaultFont'             => 'sans-serif',
+            'isRemoteEnabled'         => false,
+            'isHtml5ParserEnabled'    => true,
+            'isFontSubsettingEnabled' => true,
+        ];
+    }
 
     private function deriveConditionCode(string $condition): string
     {
         $lettersOnly = preg_replace('/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/u', '', $condition);
         return strtoupper(mb_substr($lettersOnly, 0, 3, 'UTF-8'));
     }
+
     private function generarSigla($texto)
     {
-        $texto = strtoupper(trim($texto));
-
+        $texto    = strtoupper(trim($texto));
         $palabras = preg_split('/\s+/', $texto);
 
         if (count($palabras) === 1) {
@@ -45,8 +60,7 @@ class CertificateController extends Controller
         }
 
         $ignorar = ['DE', 'LA', 'LAS', 'LOS', 'DEL', 'Y'];
-
-        $sigla = '';
+        $sigla   = '';
 
         foreach ($palabras as $p) {
             if (!in_array($p, $ignorar) && strlen($p) > 0) {
@@ -56,6 +70,298 @@ class CertificateController extends Controller
 
         return substr($sigla, 0, 3);
     }
+
+    private function extractDesignFromTemplate(?string $html): ?array
+    {
+        if (!$html) return null;
+        if (preg_match('/<!-- DESIGN_JSON:(.*?):END_DESIGN_JSON -->/s', $html, $matches)) {
+            $json = html_entity_decode($matches[1], ENT_QUOTES);
+            return json_decode($json, true);
+        }
+        return null;
+    }
+
+    private function urlToLocalPath(string $url): ?string
+    {
+        if (preg_match('#/storage/(.+)$#', $url, $m)) {
+            $localPath = Storage::disk('public')->path($m[1]);
+            $localPath = str_replace('/', DIRECTORY_SEPARATOR, $localPath);
+            if (file_exists($localPath)) {
+                return $localPath;
+            }
+        }
+        return null;
+    }
+
+    private function imageToBase64(string $path): ?string
+    {
+        if (!file_exists($path)) return null;
+
+        $mime = mime_content_type($path);
+
+        // Redimensionar y comprimir si es PNG o JPEG
+        if (in_array($mime, ['image/png', 'image/jpeg', 'image/jpg'])) {
+            $img = imagecreatefromstring(file_get_contents($path));
+            if ($img) {
+                // Redimensionar a máximo 1122x793 manteniendo proporción
+                $origW = imagesx($img);
+                $origH = imagesy($img);
+                $maxW  = 1122;
+                $maxH  = 793;
+
+                if ($origW > $maxW || $origH > $maxH) {
+                    $ratio  = min($maxW / $origW, $maxH / $origH);
+                    $newW   = (int)($origW * $ratio);
+                    $newH   = (int)($origH * $ratio);
+                    $resized = imagecreatetruecolor($newW, $newH);
+                    imagecopyresampled($resized, $img, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+                    imagedestroy($img);
+                    $img = $resized;
+                }
+
+                ob_start();
+                if ($mime === 'image/png') {
+                    imagepng($img, null, 6); // compresión 6/9
+                } else {
+                    imagejpeg($img, null, 75); // calidad 75%
+                }
+                $imageData = ob_get_clean();
+                imagedestroy($img);
+
+                return "data:{$mime};base64," . base64_encode($imageData);
+            }
+        }
+
+        // Fallback para otros formatos
+        return "data:{$mime};base64," . base64_encode(file_get_contents($path));
+    }
+
+    private function generateCertificatePdf(
+        string $htmlFront,
+        ?string $htmlBack,
+        string $tempPath,
+        string $uniqueCode
+    ): string {
+        File::ensureDirectoryExists($tempPath);
+        $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
+
+        Pdf::loadHTML($htmlFront)
+            ->setPaper([0, 0, 793, 1122])
+            ->setOptions($this->pdfOptions())
+            ->save($frontFilePath);
+
+        if (empty($htmlBack)) {
+            $content = File::get($frontFilePath);
+            File::delete($frontFilePath);
+            return $content;
+        }
+
+        $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
+        Pdf::loadHTML($htmlBack)
+            ->setPaper([0, 0, 793, 1122])
+            ->setOptions($this->pdfOptions())
+            ->save($backFilePath);
+
+        $merger = new Merger;
+        $merger->addFile($frontFilePath);
+        $merger->addFile($backFilePath);
+        $finalPdfContent = $merger->merge();
+
+        File::delete($frontFilePath, $backFilePath);
+        return $finalPdfContent;
+    }
+
+    public function buildHtmlFromDesign(array $design): string
+    {
+        $bgImage  = $design['background'] ?? '';
+        $elements = $design['elements']   ?? [];
+        $pdfW     = self::PDF_W;
+        $pdfH     = self::PDF_H;
+
+        if ($bgImage && str_starts_with($bgImage, 'http')) {
+            $localPath = $this->urlToLocalPath($bgImage);
+            $bgImage   = $localPath ? ($this->imageToBase64($localPath) ?? '') : '';
+        }
+
+        $bgStyle  = $bgImage ? '' : 'background-color: #ffffff;';
+        $bgImgTag = $bgImage
+            ? "<img src=\"{$bgImage}\" style=\"position:absolute;top:0;left:0;width:{$pdfW}px;height:{$pdfH}px;z-index:0;\" />"
+            : '';
+
+        $elementsHtml = '';
+
+        foreach ($elements as $el) {
+            $type     = $el['type'] ?? '';
+            $x        = round($el['x']      ?? 0);
+            $y        = round($el['y']      ?? 0);
+            $w        = round($el['width']  ?? 200);
+            $h        = round($el['height'] ?? 40);
+            $fontSize = round($el['fontSize'] ?? 14);
+            $style    = "position:absolute; left:{$x}px; top:{$y}px; width:{$w}px; height:{$h}px; z-index:1;";
+
+            switch ($type) {
+                case 'nombre':
+                    $color  = $el['color']  ?? '#000000';
+                    $bold   = ($el['bold']   ?? true)  ? 'font-weight:bold;'  : '';
+                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
+                    $align  = $el['align']  ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">{{ \$person->nombre }} {{ \$person->apellido }}</div>";
+                    break;
+
+                case 'curso':
+                    $color  = $el['color']  ?? '#000000';
+                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
+                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
+                    $align  = $el['align']  ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">{{ \$course->nombre }}</div>";
+                    break;
+
+                case 'fecha':
+                    $color = $el['color'] ?? '#000000';
+                    $align = $el['align'] ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ date('d/m/Y') }}</div>";
+                    break;
+
+                case 'anio':
+                    $color = $el['color'] ?? '#000000';
+                    $align = $el['align'] ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ \$certificateData['ano'] ?? date('Y') }}</div>";
+                    break;
+
+                case 'condicion':
+                    $color = $el['color'] ?? '#000000';
+                    $bold  = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
+                    $align = $el['align'] ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold} text-align:{$align}; overflow:hidden;\">{{ \$certificateData['condition'] ?? \$certificateData['tipo_de_certificado'] ?? \$certificateData['tipo_certificado'] ?? '' }}</div>";
+                    break;
+
+                case 'area':
+                    $color = $el['color'] ?? '#000000';
+                    $align = $el['align'] ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ \$course->area->nombre ?? '' }}</div>";
+                    break;
+
+                case 'horas':
+                    $color = $el['color'] ?? '#000000';
+                    $align = $el['align'] ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ \$course->horas ?? '' }} horas</div>";
+                    break;
+
+                case 'cuv':
+                    $color = $el['color'] ?? '#666666';
+                    $align = $el['align'] ?? 'center';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">CUV: {{ \$certificateData['cuv'] ?? '' }}</div>";
+                    break;
+
+                case 'qr':
+                    $elementsHtml .= "<img src=\"{{ \$qr_path }}\" style=\"{$style} object-fit:contain;\">";
+                    break;
+
+                case 'objetivo':
+                    $color  = $el['color']  ?? '#000000';
+                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
+                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
+                    $align  = $el['align']  ?? 'left';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden; word-wrap:break-word;\"><strong>Objetivo:</strong> {{ \$course->objetivo ?? '' }}</div>";
+                    break;
+
+                case 'contenido':
+                    $color  = $el['color']  ?? '#000000';
+                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
+                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
+                    $align  = $el['align']  ?? 'left';
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden; word-wrap:break-word;\"><strong>Contenido:</strong> {{ \$course->contenido ?? '' }}</div>";
+                    break;
+
+                case 'firma_responsable':
+                    $index          = (int)($el['firma_index'] ?? 0);
+                    $color          = $el['color'] ?? '#000000';
+                    $align          = $el['align'] ?? 'center';
+                    $imgH           = (int)round($h * 0.55);
+                    $fontSizeNombre = $fontSize;
+                    $fontSizeCargo  = max(9, $fontSize - 2);
+
+                    $elementsHtml .= "@php \$_resp = \$course->responsables->get({$index}); @endphp"
+                        . "@if(\$_resp)"
+                        . "<div style=\"{$style} text-align:{$align};\">"
+                        . "@php"
+                        . " \$_sigPath = \$_resp->signature_path"
+                        . "     ? str_replace('/', DIRECTORY_SEPARATOR, Storage::disk('public')->path(\$_resp->signature_path))"
+                        . "     : null;"
+                        . "@endphp"
+                        . "@if(\$_sigPath && file_exists(\$_sigPath))"
+                        . "@php \$_sigData = 'data:' . mime_content_type(\$_sigPath) . ';base64,' . base64_encode(file_get_contents(\$_sigPath)); @endphp"
+                        . "<img src=\"{{ \$_sigData }}\" style=\"width:100%; height:{$imgH}px; object-fit:contain; display:block;\">"
+                        . "@else"
+                        . "<div style=\"width:100%; height:{$imgH}px; border-bottom:1px solid {$color}; display:block;\"></div>"
+                        . "@endif"
+                        . "<div style=\"font-size:{$fontSizeNombre}px; color:{$color}; font-weight:bold; line-height:1.4; text-align:{$align};\">{{ \$_resp->nombre }}</div>"
+                        . "<div style=\"font-size:{$fontSizeCargo}px; color:{$color}; line-height:1.3; text-align:{$align};\">{{ \$_resp->cargo ?? '' }}</div>"
+                        . "</div>"
+                        . "@endif";
+                    break;
+
+                case 'texto':
+                    $color   = $el['color']   ?? '#000000';
+                    $bold    = ($el['bold']    ?? false) ? 'font-weight:bold;'  : '';
+                    $italic  = ($el['italic']  ?? false) ? 'font-style:italic;' : '';
+                    $align   = $el['align']   ?? 'left';
+                    $content = htmlspecialchars($el['content'] ?? 'Texto libre');
+                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">{$content}</div>";
+                    break;
+
+                case 'imagen':
+                    $src = $el['src'] ?? '';
+                    if ($src) {
+                        if (str_starts_with($src, 'http')) {
+                            $localPath = $this->urlToLocalPath($src);
+                            $src       = $localPath ? ($this->imageToBase64($localPath) ?? '') : '';
+                        }
+                        if ($src) {
+                            $elementsHtml .= "<img src=\"{$src}\" style=\"{$style} object-fit:contain;\">";
+                        }
+                    }
+                    break;
+            }
+        }
+
+        $designJson = htmlspecialchars(json_encode($design), ENT_QUOTES);
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <style>
+        @page { margin: 0; size: A4 landscape; }
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0;
+            width: {$pdfW}px; height: {$pdfH}px;
+            overflow: hidden;
+            font-family: 'DejaVu Sans', 'Helvetica', Arial, sans-serif;
+        }
+        .cert-page {
+            position: relative;
+            width: {$pdfW}px; height: {$pdfH}px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+<!-- DESIGN_JSON:{$designJson}:END_DESIGN_JSON -->
+<div class="cert-page" style="{$bgStyle}">
+{$bgImgTag}
+{$elementsHtml}
+</div>
+</body>
+</html>
+HTML;
+    }
+
+    // =========================================================================
+    // ACCIONES
+    // =========================================================================
 
     public function index(Request $request)
     {
@@ -96,7 +402,6 @@ class CertificateController extends Controller
             $query->where('condition', $request->search_tipo);
         }
 
-        // Tipos disponibles respetando el área del usuario
         $tiposQuery = Certificate::select('condition')->distinct()->orderBy('condition');
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
@@ -106,8 +411,7 @@ class CertificateController extends Controller
         }
 
         $tiposDisponibles = $tiposQuery->pluck('condition');
-
-        $certificates = $query->with(['person', 'course.area'])->latest()->paginate(10);
+        $certificates     = $query->with(['person', 'course.area'])->latest()->paginate(10);
 
         return view('certificates.index', compact('certificates', 'tiposDisponibles'));
     }
@@ -132,17 +436,18 @@ class CertificateController extends Controller
 
         return view('certificates.create', compact('courses', 'people'));
     }
-    
+
     public function store(Request $request)
     {
-        // 🔥 SOLUCIÓN AL TIMEOUT
-        set_time_limit(120);
+        set_time_limit(300);
         ini_set('memory_limit', '512M');
+
         try {
             $user = Auth::user();
             if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador'])) {
                 abort(403, 'No tienes permisos para crear certificados.');
             }
+
             $request->validate([
                 'course_id'        => 'required|exists:courses,id',
                 'person_id'        => 'required|exists:persons,id',
@@ -153,17 +458,19 @@ class CertificateController extends Controller
                 'iniciales'        => 'required|string|max:255',
                 'anio'             => 'required|digits:4|integer|min:2000|max:2099',
             ]);
+
             $course = Course::with(['resolution', 'area', 'responsables'])->findOrFail($request->course_id);
             $person = Person::findOrFail($request->person_id);
-            // 🔹 GENERACIÓN CÓDIGO
+
             $unidadAcademica = $this->generarSigla($request->unidad_academica);
             $subarea         = $this->generarSigla($request->subarea);
             $areaCode        = $this->generarSigla($course->area->nombre ?? '');
             $iniciales       = strtoupper($request->iniciales);
-            $anio           = $request->anio;
-            $anioCorto      = substr($anio, -2);
-            $tresUltimosDni = substr($person->dni, -3);
-            $conditionCode  = $this->deriveConditionCode($request->condition);
+            $anio            = $request->anio;
+            $anioCorto       = substr($anio, -2);
+            $tresUltimosDni  = substr($person->dni, -3);
+            $conditionCode   = $this->deriveConditionCode($request->condition);
+
             $uniqueCode = $unidadAcademica
                         . $areaCode
                         . $subarea
@@ -177,27 +484,22 @@ class CertificateController extends Controller
                 return back()->withErrors(['cuv' => 'El CUV ya existe.']);
             }
 
-            // 🔹 QR
             $qrPath = 'qrcodes/' . $uniqueCode . '.svg';
             Storage::disk('public')->makeDirectory('qrcodes');
-
-            $verificationUrl = route('certificates.verify', $uniqueCode);
-
             QrCode::format('svg')->size(150)->generate(
-                $verificationUrl,
+                route('certificates.verify', $uniqueCode),
                 storage_path('app/public/' . $qrPath)
             );
 
-            // 🔹 DATA
             $data = [
-                'person'  => $person,
-                'course'  => $course,
+                'person'          => $person,
+                'course'          => $course,
                 'certificateData' => [
-                    'cuv' => $uniqueCode,
+                    'cuv'                 => $uniqueCode,
                     'tipo_de_certificado' => $request->condition,
-                    'horas' => $course->horas,
-                    'ano' => $anio,
-                    'condition' => $request->condition
+                    'horas'               => $course->horas,
+                    'ano'                 => $anio,
+                    'condition'           => $request->condition,
                 ],
                 'qr_path' => storage_path('app/public/' . $qrPath),
             ];
@@ -208,70 +510,51 @@ class CertificateController extends Controller
                 return back()->withErrors(['template' => 'Falta plantilla']);
             }
 
-            // 🔥 OPTIMIZACIÓN: evitar doble procesamiento innecesario
-            $htmlFront = Blade::render(
-                $this->extractDesignFromTemplate($area->template_front)
-                    ? $this->buildHtmlFromDesign(
-                        $this->extractDesignFromTemplate($area->template_front)
-                    )
-                    : $area->template_front,
+            $designFront = $this->extractDesignFromTemplate($area->template_front);
+            $htmlFront   = Blade::render(
+                $designFront ? $this->buildHtmlFromDesign($designFront) : $area->template_front,
                 $data
             );
 
             $htmlBack = null;
-
             if (!empty($area->template_back)) {
                 $designBack = $this->extractDesignFromTemplate($area->template_back);
-
                 if ($designBack && (!empty($designBack['elements']) || !empty($designBack['background']))) {
-                    $htmlBack = Blade::render(
-                        $this->buildHtmlFromDesign($designBack),
-                        $data
-                    );
+                    $htmlBack = Blade::render($this->buildHtmlFromDesign($designBack), $data);
                 }
             }
 
-            // 🔥 DEBUG PROTECCIÓN (opcional)
-            if (strlen($htmlFront) > 1000000) {
+            if (strlen($htmlFront) > 5000000) {
                 return back()->withErrors(['pdf' => 'El diseño del certificado es demasiado pesado.']);
             }
 
-            // 🔹 PDF
-            $tempPath = storage_path('app/temp_pdf');
-
-            $finalPdfContent = $this->generateCertificatePdf(
-                $htmlFront,
-                $htmlBack,
-                $tempPath,
-                $uniqueCode
-            );
+            $tempPath        = storage_path('app/temp_pdf');
+            $finalPdfContent = $this->generateCertificatePdf($htmlFront, $htmlBack, $tempPath, $uniqueCode);
 
             $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
             Storage::disk('public')->put($pdfPath, $finalPdfContent);
 
-            // 🔥 liberar memoria
             unset($htmlFront, $htmlBack, $finalPdfContent);
             gc_collect_cycles();
 
-            // 🔹 DB
             $certificate = Certificate::create([
-                'course_id'  => $course->id,
-                'person_id'  => $person->id,
-                'condition'  => $request->condition,
-                'nota'       => $request->nota,
-                'unidad_academica' => $unidadAcademica,
-                'area_excel' => $course->area->nombre ?? null,
-                'subarea'    => $subarea,
-                'codigo_incremental' => $person->id,
-                'anio'       => $anio,
-                'tipo_certificado' => $conditionCode,
-                'iniciales'  => $iniciales,
+                'course_id'                => $course->id,
+                'person_id'                => $person->id,
+                'condition'                => $request->condition,
+                'nota'                     => $request->nota,
+                'unidad_academica'         => $unidadAcademica,
+                'area_excel'               => $course->area->nombre ?? null,
+                'subarea'                  => $subarea,
+                'codigo_incremental'       => $person->id,
+                'anio'                     => $anio,
+                'tipo_certificado'         => $conditionCode,
+                'iniciales'                => $iniciales,
                 'tres_ultimos_digitos_dni' => $tresUltimosDni,
-                'unique_code' => $uniqueCode,
-                'qr_path'    => $qrPath,
-                'pdf_path'   => $pdfPath,
-                'email_status' => 'pendiente',
-                'email_error' => null,
+                'unique_code'              => $uniqueCode,
+                'qr_path'                  => $qrPath,
+                'pdf_path'                 => $pdfPath,
+                'email_status'             => 'pendiente',
+                'email_error'              => null,
             ]);
 
             if (!empty($person->email)) {
@@ -282,12 +565,8 @@ class CertificateController extends Controller
                 ->with('success', 'Certificado generado correctamente');
 
         } catch (\Throwable $e) {
-
             Log::error('ERROR GENERANDO CERTIFICADO: ' . $e->getMessage());
-
-            return back()->withErrors([
-                'error' => 'Error al generar el certificado. Ver logs.'
-            ]);
+            return back()->withErrors(['error' => 'Error al generar el certificado. Ver logs.']);
         }
     }
 
@@ -377,9 +656,6 @@ class CertificateController extends Controller
             'person_id' => 'required|exists:persons,id',
             'condition' => 'required|string|min:3|max:100|regex:/^[\pL\s\-]+$/u',
             'nota'      => 'nullable|numeric|min:0',
-        ], [
-            'condition.min'   => 'La condición debe tener al menos 3 caracteres.',
-            'condition.regex' => 'La condición solo puede contener letras, espacios y guiones.',
         ]);
 
         $course = Course::with(['responsables'])->findOrFail($request->course_id);
@@ -393,9 +669,11 @@ class CertificateController extends Controller
         if ($certificate->pdf_path) Storage::disk('public')->delete($certificate->pdf_path);
         if ($certificate->qr_path)  Storage::disk('public')->delete($certificate->qr_path);
 
-        $verificationUrl = route('certificates.verify', $certificate->unique_code);
-        $qrPath          = 'qrcodes/' . $certificate->unique_code . '.svg';
-        QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
+        $qrPath = 'qrcodes/' . $certificate->unique_code . '.svg';
+        QrCode::format('svg')->size(150)->generate(
+            route('certificates.verify', $certificate->unique_code),
+            storage_path('app/public/' . $qrPath)
+        );
 
         $person = Person::find($request->person_id);
         $data   = [
@@ -408,18 +686,20 @@ class CertificateController extends Controller
             'emission_date' => $certificate->created_at->format('d/m/Y'),
         ];
 
-        $pdf     = Pdf::loadView('certificates.pdf_template', $data)->setPaper('a4', 'landscape');
+        $pdf     = Pdf::loadView('certificates.pdf_template', $data)
+            ->setPaper([0, 0, 793, 1122])
+            ->setOptions($this->pdfOptions());
         $pdfPath = 'certificates/' . $certificate->unique_code . '.pdf';
         Storage::disk('public')->put($pdfPath, $pdf->output());
 
         $certificate->update([
-            'course_id'       => $request->course_id,
-            'person_id'       => $request->person_id,
-            'condition'       => $request->condition,
-            'tipo_certificado'=> $this->deriveConditionCode($request->condition),
-            'nota'            => $request->nota,
-            'qr_path'         => $qrPath,
-            'pdf_path'        => $pdfPath,
+            'course_id'        => $request->course_id,
+            'person_id'        => $request->person_id,
+            'condition'        => $request->condition,
+            'tipo_certificado' => $this->deriveConditionCode($request->condition),
+            'nota'             => $request->nota,
+            'qr_path'          => $qrPath,
+            'pdf_path'         => $pdfPath,
         ]);
 
         return redirect()->route('certificates.index')->with('success', 'Certificado actualizado exitosamente.');
@@ -496,9 +776,11 @@ class CertificateController extends Controller
             $uniqueCode = $row['cuv'];
             $qrPath     = 'qrcodes/' . $uniqueCode . '.svg';
 
-            $verificationUrl = route('certificates.verify', $uniqueCode);
             Storage::disk('public')->makeDirectory('qrcodes');
-            QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
+            QrCode::format('svg')->size(150)->generate(
+                route('certificates.verify', $uniqueCode),
+                storage_path('app/public/' . $qrPath)
+            );
 
             $data = [
                 'person'          => $person,
@@ -527,35 +809,19 @@ class CertificateController extends Controller
                 }
             }
 
-            $tempPath = storage_path('app/temp_pdf');
-            File::ensureDirectoryExists($tempPath);
-
-            $htmlFront = null;
+            $tempPath  = storage_path('app/temp_pdf');
+            $htmlFront = $templateFront ? Blade::render($templateFront, $data) : view('certificates.pdf_template_front', $data)->render();
             $htmlBack  = null;
-
-            if ($templateFront) {
-                $htmlFront = Blade::render($templateFront, $data);
-            } else {
-                $htmlFront = view('certificates.pdf_template_front', $data)->render();
-            }
 
             if ($templateBack) {
                 $designBack  = $this->extractDesignFromTemplate($area->template_back ?? '');
-                $backIsEmpty = $designBack
-                    && empty($designBack['elements'])
-                    && empty($designBack['background']);
-
+                $backIsEmpty = $designBack && empty($designBack['elements']) && empty($designBack['background']);
                 if (!$backIsEmpty) {
                     $htmlBack = Blade::render($templateBack, $data);
                 }
             }
 
-            $finalPdfContent = $this->generateCertificatePdf(
-                $htmlFront,
-                $htmlBack,
-                $tempPath,
-                $uniqueCode
-            );
+            $finalPdfContent = $this->generateCertificatePdf($htmlFront, $htmlBack, $tempPath, $uniqueCode);
 
             $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
             Storage::disk('public')->put($pdfPath, $finalPdfContent);
@@ -565,21 +831,21 @@ class CertificateController extends Controller
             $conditionCode = $this->deriveConditionCode($conditionRaw);
 
             $certificate = Certificate::create([
-                'course_id'               => $course->id,
-                'person_id'               => $person->id,
-                'condition'               => $conditionRaw,
-                'nota'                    => $row['nota']               ?? null,
-                'unique_code'             => $uniqueCode,
-                'qr_path'                 => $qrPath,
-                'pdf_path'                => $pdfPath,
-                'unidad_academica'        => $row['unidad_academica']   ?? null,
-                'area_excel'              => $row['area']               ?? null,
-                'subarea'                 => $row['subarea']            ?? null,
-                'codigo_incremental'      => $row['codigo_incremental'] ?? null,
-                'anio'                    => $row['ano']                ?? null,
-                'tipo_certificado'        => $conditionCode,
-                'iniciales'               => $row['iniciales']          ?? null,
-                'tres_ultimos_digitos_dni'=> $row['3_ultimos_del_dni']  ?? null,
+                'course_id'                => $course->id,
+                'person_id'                => $person->id,
+                'condition'                => $conditionRaw,
+                'nota'                     => $row['nota']               ?? null,
+                'unique_code'              => $uniqueCode,
+                'qr_path'                  => $qrPath,
+                'pdf_path'                 => $pdfPath,
+                'unidad_academica'         => $row['unidad_academica']   ?? null,
+                'area_excel'               => $row['area']               ?? null,
+                'subarea'                  => $row['subarea']            ?? null,
+                'codigo_incremental'       => $row['codigo_incremental'] ?? null,
+                'anio'                     => $row['ano']                ?? null,
+                'tipo_certificado'         => $conditionCode,
+                'iniciales'                => $row['iniciales']          ?? null,
+                'tres_ultimos_digitos_dni' => $row['3_ultimos_del_dni']  ?? null,
             ]);
 
             $certificatesCreated++;
@@ -642,16 +908,17 @@ class CertificateController extends Controller
         }
 
         $htmlFront = Blade::render($templateFront, $data);
-        $pdf       = Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape');
+        $pdf       = Pdf::loadHTML($htmlFront)
+            ->setPaper([0, 0, 793, 1122])
+            ->setOptions($this->pdfOptions());
+
         return $pdf->stream('previsualizacion_certificado.pdf');
     }
 
     public function getAreaByCourse(Course $course)
     {
         $course->load('area');
-        return response()->json([
-            'area_name' => $course->area->nombre ?? 'Sin Área Definida',
-        ]);
+        return response()->json(['area_name' => $course->area->nombre ?? 'Sin Área Definida']);
     }
 
     public function showImportForm()
@@ -695,23 +962,13 @@ class CertificateController extends Controller
 
     public function downloadPdf(Certificate $certificate)
     {
-        $user = Auth::user();
+        $path = Storage::disk('public')->path($certificate->pdf_path);
 
-        if ($user->role && $user->role->name === 'Administrador') {
-            if ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
-                abort(403, 'No tienes permisos para descargar este certificado.');
-            }
-        } elseif ($user->role && $user->role->name !== 'Root') {
-            if (!$user->person || $certificate->person_id != $user->person->id) {
-                abort(403, 'No tienes permisos para descargar este certificado.');
-            }
+        if (!file_exists($path)) {
+            abort(404, 'PDF no encontrado');
         }
 
-        if (!$certificate->pdf_path || !file_exists(storage_path('app/public/' . $certificate->pdf_path))) {
-            return redirect()->back()->with('error', 'El archivo PDF no existe.');
-        }
-
-        return response()->download(storage_path('app/public/' . $certificate->pdf_path));
+        return response()->file($path);
     }
 
     public function getPersonsByCourse(Course $course)
@@ -719,8 +976,7 @@ class CertificateController extends Controller
         $course->load('area');
 
         $personasConCertificado = Certificate::where('course_id', $course->id)
-            ->pluck('person_id')
-            ->toArray();
+            ->pluck('person_id')->toArray();
 
         $persons = Person::whereHas('areas', function ($q) use ($course) {
                 $q->where('areas.id', $course->area_id);
@@ -747,8 +1003,7 @@ class CertificateController extends Controller
         $search = $request->get('q', '');
 
         $personasConCertificado = Certificate::where('course_id', $course->id)
-            ->pluck('person_id')
-            ->toArray();
+            ->pluck('person_id')->toArray();
 
         $persons = Person::whereHas('areas', function ($q) use ($course) {
                 $q->where('areas.id', $course->area_id);
@@ -780,277 +1035,5 @@ class CertificateController extends Controller
             })->count(),
             'area_name'  => $course->area->nombre ?? '',
         ]);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // HELPERS PRIVADOS
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private function extractDesignFromTemplate(string $html): ?array
-    {
-        if (preg_match('/<!-- DESIGN_JSON:(.*?):END_DESIGN_JSON -->/s', $html, $matches)) {
-            $json = html_entity_decode($matches[1], ENT_QUOTES);
-            return json_decode($json, true);
-        }
-        return null;
-    }
-
-    public function buildHtmlFromDesign(array $design): string
-    {
-        $bgImage  = $design['background'] ?? '';
-        $elements = $design['elements']   ?? [];
-
-        $pdfW = self::PDF_W;
-        $pdfH = self::PDF_H;
-
-        $scaleX = 1;
-        $scaleY = 1;
-        $scale  = 1;
-
-        if ($bgImage && str_starts_with($bgImage, 'http')) {
-            $storagePublicUrl = Storage::disk('public')->url('');
-            $relativePath     = ltrim(str_replace($storagePublicUrl, '', $bgImage), '/');
-            $localPath        = Storage::disk('public')->path($relativePath);
-            if (file_exists($localPath)) {
-                $bgImage = str_replace('\\', '/', $localPath);
-            }
-        }
-
-        $bgStyle  = $bgImage ? "" : "background-color: #ffffff;";
-        $bgImgTag = $bgImage
-            ? "<img src=\"{$bgImage}\" style=\"position:absolute;top:0;left:0;width:{$pdfW}px;height:{$pdfH}px;z-index:0;\" />"
-            : "";
-
-        $elementsHtml = '';
-
-        foreach ($elements as $el) {
-            $type = $el['type'] ?? '';
-
-            $x = round(($el['x']      ?? 0)   * $scaleX);
-            $y = round(($el['y']      ?? 0)   * $scaleY);
-            $w = round(($el['width']  ?? 200) * $scaleX);
-            $h = round(($el['height'] ?? 40)  * $scaleY);
-
-            $fontSizeRaw = $el['fontSize'] ?? 14;
-            $fontSize    = round($fontSizeRaw * $scale);
-
-            $style = "position:absolute; left:{$x}px; top:{$y}px; width:{$w}px; height:{$h}px; z-index:1;";
-
-            switch ($type) {
-                case 'nombre':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? true)  ? 'font-weight:bold;'  : '';
-                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">{{ \$person->nombre }} {{ \$person->apellido }}</div>";
-                    break;
-
-                case 'curso':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
-                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">{{ \$course->nombre }}</div>";
-                    break;
-
-                case 'fecha':
-                    $color = $el['color'] ?? '#000000';
-                    $align = $el['align'] ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ date('d/m/Y') }}</div>";
-                    break;
-
-                case 'anio':
-                    $color = $el['color'] ?? '#000000';
-                    $align = $el['align'] ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ \$certificateData['ano'] ?? date('Y') }}</div>";
-                    break;
-
-                case 'condicion':
-                    $color = $el['color'] ?? '#000000';
-                    $bold  = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
-                    $align = $el['align'] ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold} text-align:{$align}; overflow:hidden;\">{{ \$certificateData['condition'] ?? \$certificateData['tipo_de_certificado'] ?? \$certificateData['tipo_certificado'] ?? '' }}</div>";
-                    break;
-
-                case 'area':
-                    $color = $el['color'] ?? '#000000';
-                    $align = $el['align'] ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ \$course->area->nombre ?? '' }}</div>";
-                    break;
-
-                case 'horas':
-                    $color = $el['color'] ?? '#000000';
-                    $align = $el['align'] ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">{{ \$course->horas ?? '' }} horas</div>";
-                    break;
-
-                case 'cuv':
-                    $color = $el['color'] ?? '#666666';
-                    $align = $el['align'] ?? 'center';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">CUV: {{ \$certificateData['cuv'] ?? '' }}</div>";
-                    break;
-
-                case 'qr':
-                    $elementsHtml .= "<img src=\"{{ \$qr_path }}\" style=\"{$style} object-fit:contain;\">";
-                    break;
-
-                case 'objetivo':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
-                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'left';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden; word-wrap:break-word;\"><strong>Objetivo:</strong> {{ \$course->objetivo ?? '' }}</div>";
-                    break;
-
-                case 'contenido':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
-                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'left';
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden; word-wrap:break-word;\"><strong>Contenido:</strong> {{ \$course->contenido ?? '' }}</div>";
-                    break;
-
-                case 'firma_responsable':
-                    $index          = (int)($el['firma_index'] ?? 0);
-                    $color          = $el['color'] ?? '#000000';
-                    $align          = $el['align'] ?? 'center';
-                    $imgH           = (int)round($h * 0.55);
-                    $fontSizeNombre = $fontSize;
-                    $fontSizeCargo  = max(9, $fontSize - 2);
-
-                    $elementsHtml .= "@php \$_resp = \$course->responsables->get({$index}); @endphp"
-                        . "@if(\$_resp)"
-                        . "<div style=\"{$style} text-align:{$align};\">"
-
-                        // 🔹 Firma (imagen)
-                        . "@php
-                                \$_sigPath = \$_resp->signature_path
-                                    ? str_replace('\\\\', '/', Storage::disk('public')->path(\$_resp->signature_path))
-                                    : null;
-                        @endphp"
-
-                        . "@if(\$_sigPath && file_exists(\$_sigPath))"
-                        . "<img src=\"{{ \$_sigPath }}\" style=\"width:100%; height:{$imgH}px; object-fit:contain; display:block;\">"
-                        . "@else"
-                        . "<div style=\"width:100%; height:{$imgH}px; border-bottom:1px solid {$color}; display:block;\"></div>"
-                        . "@endif"
-
-                        // 🔹 Nombre
-                        . "<div style=\"font-size:{$fontSizeNombre}px; color:{$color}; font-weight:bold; line-height:1.4; text-align:{$align};\">{{ \$_resp->nombre }}</div>"
-
-                        // 🔹 Cargo
-                        . "<div style=\"font-size:{$fontSizeCargo}px; color:{$color}; line-height:1.3; text-align:{$align};\">{{ \$_resp->cargo ?? '' }}</div>"
-
-                        . "</div>"
-                        . "@endif";
-                    break;
-                    $index          = (int)($el['firma_index'] ?? 0);
-                    $color          = $el['color'] ?? '#000000';
-                    $align          = $el['align'] ?? 'center';
-                    $imgH           = (int)round($h * 0.55);
-                    $fontSizeNombre = $fontSize;
-                    $fontSizeCargo  = max(9, $fontSize - 2);
-
-                    $elementsHtml .= "@php \$_resp = \$course->responsables->get({$index}); @endphp"
-                        . "@if(\$_resp)"
-                        . "<div style=\"{$style} text-align:{$align};\">"
-                        . "@if(\$_resp->signature_path)"
-                        . "<img src=\"{{ storage_path('app/public/' . \$_resp->signature_path) }}\" style=\"width:100%; height:{$imgH}px; object-fit:contain; display:block;\">"
-                        . "@else"
-                        . "<div style=\"width:100%; height:{$imgH}px; border-bottom:1px solid {$color}; display:block;\"></div>"
-                        . "@endif"
-                        . "<div style=\"font-size:{$fontSizeNombre}px; color:{$color}; font-weight:bold; line-height:1.4; text-align:{$align};\">{{ \$_resp->nombre }}</div>"
-                        . "<div style=\"font-size:{$fontSizeCargo}px; color:{$color}; line-height:1.3; text-align:{$align};\">{{ \$_resp->cargo ?? '' }}</div>"
-                        . "</div>"
-                        . "@endif";
-                    break;
-
-                case 'texto':
-                    $color   = $el['color']   ?? '#000000';
-                    $bold    = ($el['bold']    ?? false) ? 'font-weight:bold;'  : '';
-                    $italic  = ($el['italic']  ?? false) ? 'font-style:italic;' : '';
-                    $align   = $el['align']   ?? 'left';
-                    $content = htmlspecialchars($el['content'] ?? 'Texto libre');
-                    $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">{$content}</div>";
-                    break;
-
-                case 'imagen':
-                    $src = $el['src'] ?? '';
-                    if ($src) {
-                        if (str_starts_with($src, 'http')) {
-                            $storagePublicUrl = Storage::disk('public')->url('');
-                            $relativePath     = ltrim(str_replace($storagePublicUrl, '', $src), '/');
-                            $localPath        = Storage::disk('public')->path($relativePath);
-                            $src = file_exists($localPath)
-                                ? str_replace('\\', '/', $localPath)
-                                : $src;
-                        }
-                        $elementsHtml .= "<img src=\"{$src}\" style=\"{$style} object-fit:contain;\">";
-                    }
-                    break;
-            }
-        }
-
-        $designJson = htmlspecialchars(json_encode($design), ENT_QUOTES);
-
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <style>
-        @page { margin: 0; size: A4 landscape; }
-        * { box-sizing: border-box; }
-        html, body {
-            margin: 0; padding: 0;
-            width: {$pdfW}px; height: {$pdfH}px;
-            overflow: hidden;
-            font-family: 'DejaVu Sans', 'Helvetica', Arial, sans-serif;
-        }
-        .cert-page {
-            position: relative;
-            width: {$pdfW}px; height: {$pdfH}px;
-            overflow: hidden;
-        }
-    </style>
-</head>
-<body>
-<!-- DESIGN_JSON:{$designJson}:END_DESIGN_JSON -->
-<div class="cert-page" style="{$bgStyle}">
-{$bgImgTag}
-{$elementsHtml}
-</div>
-</body>
-</html>
-HTML;
-    }
-
-    private function generateCertificatePdf(
-        string $htmlFront,
-        ?string $htmlBack,
-        string $tempPath,
-        string $uniqueCode
-    ): string {
-        File::ensureDirectoryExists($tempPath);
-        $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
-
-        Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape')->save($frontFilePath);
-
-        if (empty($htmlBack)) {
-            $content = File::get($frontFilePath);
-            File::delete($frontFilePath);
-            return $content;
-        }
-
-        $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
-        Pdf::loadHTML($htmlBack)->setPaper('a4', 'landscape')->save($backFilePath);
-
-        $merger = new Merger;
-        $merger->addFile($frontFilePath);
-        $merger->addFile($backFilePath);
-        $finalPdfContent = $merger->merge();
-
-        File::delete($frontFilePath, $backFilePath);
-        return $finalPdfContent;
     }
 }

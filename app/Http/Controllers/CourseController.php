@@ -23,7 +23,6 @@ class CourseController extends Controller
             $query->where('area_id', $user->area_id);
         }
 
-        // ✅ Filtros de búsqueda
         if ($request->filled('nombre')) {
             $query->where('nombre', 'like', '%' . $request->nombre . '%');
         }
@@ -35,22 +34,22 @@ class CourseController extends Controller
                      ->latest()
                      ->paginate(10)
                      ->withQueryString();
+
         return view('courses.index', compact('courses'));
     }
 
     public function create()
     {
         $user = Auth::user();
-        
+
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $resolutions = Resolution::where('area_id', $user->area_id)->get();
-            $areas = Area::where('id', $user->area_id)->get();
+            $areas       = Area::where('id', $user->area_id)->get();
         } else {
             $resolutions = Resolution::all();
-            $areas = Area::all();
+            $areas       = Area::all();
         }
 
-        // ✅ Calcular el próximo número de curso (global)
         $nextNroCurso = (int)(Course::max('nro_curso') ?? 0) + 1;
 
         return view('courses.create', compact('resolutions', 'areas', 'nextNroCurso'));
@@ -102,12 +101,12 @@ class CourseController extends Controller
                 'horas'         => $data['horas'],
                 'tipo_horas'    => $data['tipo_horas'],
                 'resolution_id' => $data['resolution_id'],
-                'objetivo'      => $data['objetivo'],
-                'contenido'     => $data['contenido'],
+                'objetivo'      => $data['objetivo'] ?? null,
+                'contenido'     => $data['contenido'] ?? null,
                 'maxima_nota'   => $data['maxima_nota'] ?? null,
             ]);
 
-            if ($request->has('responsables')) {
+            if ($request->filled('responsables') && is_array($request->responsables)) {
                 foreach ($request->responsables as $index => $responsableData) {
                     $signaturePath = null;
                     if (isset($responsableData['signature']) && $responsableData['signature']) {
@@ -125,7 +124,7 @@ class CourseController extends Controller
 
             DB::commit();
             return redirect()->route('courses.index')->with('success', 'Curso creado exitosamente.');
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
@@ -137,7 +136,7 @@ class CourseController extends Controller
     public function show(Course $course)
     {
         $user = Auth::user();
-        
+
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($course->area_id != $user->area_id) {
                 abort(403, 'No tienes permisos para ver este curso.');
@@ -151,7 +150,7 @@ class CourseController extends Controller
     public function edit(Course $course)
     {
         $user = Auth::user();
-        
+
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($course->area_id != $user->area_id) {
                 abort(403, 'No tienes permisos para editar este curso.');
@@ -160,10 +159,10 @@ class CourseController extends Controller
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $resolutions = Resolution::where('area_id', $user->area_id)->get();
-            $areas = Area::where('id', $user->area_id)->get();
+            $areas       = Area::where('id', $user->area_id)->get();
         } else {
             $resolutions = Resolution::all();
-            $areas = Area::all();
+            $areas       = Area::all();
         }
 
         $course->load('responsables');
@@ -173,7 +172,7 @@ class CourseController extends Controller
     public function update(Request $request, Course $course)
     {
         $user = Auth::user();
-        
+
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($course->area_id != $user->area_id) {
                 abort(403, 'No tienes permisos para actualizar este curso.');
@@ -227,12 +226,12 @@ class CourseController extends Controller
                 'horas'         => $data['horas'],
                 'tipo_horas'    => $data['tipo_horas'],
                 'resolution_id' => $data['resolution_id'],
-                'objetivo'      => $data['objetivo'],
-                'contenido'     => $data['contenido'],
+                'objetivo'      => $data['objetivo'] ?? null,
+                'contenido'     => $data['contenido'] ?? null,
                 'maxima_nota'   => $data['maxima_nota'] ?? null,
             ]);
 
-            if ($request->has('deleted_responsables')) {
+            if ($request->filled('deleted_responsables') && is_array($request->deleted_responsables)) {
                 foreach ($request->deleted_responsables as $deletedId) {
                     $responsable = CourseResponsable::find($deletedId);
                     if ($responsable && $responsable->course_id == $course->id) {
@@ -244,7 +243,7 @@ class CourseController extends Controller
                 }
             }
 
-            if ($request->has('responsables')) {
+            if ($request->filled('responsables') && is_array($request->responsables)) {
                 foreach ($request->responsables as $index => $responsableData) {
                     if (isset($responsableData['id']) && $responsableData['id']) {
                         $responsable = CourseResponsable::find($responsableData['id']);
@@ -286,7 +285,7 @@ class CourseController extends Controller
 
             DB::commit();
             return redirect()->route('courses.index')->with('success', 'Curso actualizado exitosamente.');
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
@@ -298,7 +297,7 @@ class CourseController extends Controller
     public function destroy(Course $course)
     {
         $user = Auth::user();
-        
+
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($course->area_id != $user->area_id) {
                 abort(403, 'No tienes permisos para eliminar este curso.');
@@ -322,7 +321,7 @@ class CourseController extends Controller
 
             DB::commit();
             return redirect()->route('courses.index')->with('success', 'Curso eliminado exitosamente.');
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()

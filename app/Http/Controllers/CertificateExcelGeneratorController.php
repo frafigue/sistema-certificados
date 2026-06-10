@@ -24,21 +24,27 @@ class CertificateExcelGeneratorController extends Controller
     public function batchStatus($id)
     {
         $batch = Bus::findBatch($id);
-
         if (!$batch) {
             return response()->json([
-                'error' => 'Batch no encontrado'
+                'success' => false,
+                'message' => 'Batch no encontrado'
             ], 404);
         }
-
         return response()->json([
-            'id'        => $batch->id,
-            'total'     => $batch->totalJobs,
-            'pending'   => $batch->pendingJobs,
-            'processed' => $batch->processedJobs(),
-            'failed'    => $batch->failedJobs,
-            'progress'  => $batch->progress(), // % automático
-            'finished'  => $batch->finished(),
+            'success' => true,
+            'data' => [
+                'id' => $batch->id,
+                'name' => $batch->name,
+                'total_jobs' => $batch->totalJobs,
+                'pending_jobs' => $batch->pendingJobs,
+                'processed_jobs' => $batch->processedJobs(),
+                'failed_jobs' => $batch->failedJobs,
+                'progress' => $batch->progress(),
+                'finished' => $batch->finished(),
+                'cancelled' => $batch->cancelled(),
+                'created_at' => $batch->createdAt,
+                'finished_at' => $batch->finishedAt,
+            ]
         ]);
     }
 

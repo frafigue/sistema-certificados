@@ -395,8 +395,8 @@ class AreaController extends Controller
                 $filename = 'area-backgrounds/' . $area->id . '/' . $side . '_' . time() . '.' . $extension;
                 Storage::disk('public')->put($filename, $imageData);
 
-                $design['background'] = Storage::disk('public')->url($filename);
-
+                //$design['background'] = Storage::disk('public')->url($filename);
+                $design['background'] = '/storage/' . $filename;
                 unset($imageData);
             } catch (Throwable $e) {
                 $design['background'] = '';

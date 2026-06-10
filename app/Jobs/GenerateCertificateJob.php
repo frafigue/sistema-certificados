@@ -19,13 +19,15 @@ class GenerateCertificateJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels,  Batchable;
 
     public $row;
-
+    public $importHistoryId;
     public int $tries = 3;
     public int $timeout = 300;
 
-    public function __construct($row)
+    public function __construct($row, $importHistoryId = null)
     {
         $this->row = $row;
+        $this->importHistoryId = $importHistoryId;
+
         $this->onQueue('certificates');
     }
 
@@ -52,6 +54,7 @@ class GenerateCertificateJob implements ShouldQueue
 
             // 🔥 GENERAR CERTIFICADO (CORE)
             $certificate = $service->generate([
+                'import_history_id' => $this->importHistoryId,
                 'course_id'         => $course->id,
                 'person_id'         => $person->id,
                 'tipo_certificado'  => $this->row['tipo_certificado'],

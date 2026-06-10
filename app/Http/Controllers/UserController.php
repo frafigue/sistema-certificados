@@ -34,6 +34,19 @@ class UserController extends Controller
             'area_id'  => ['nullable', 'exists:areas,id'],
         ]);
 
+        $role = Role::find($request->role_id);
+
+        if (
+            in_array($role->name, ['Administrador', 'Persona']) &&
+            !$request->area_id
+        ) {
+            return back()
+                ->withErrors([
+                    'area_id' => 'Debe seleccionar un área.'
+                ])
+                ->withInput();
+        }
+
         $user = User::create([
             'name'     => $request->name,
             'email'    => $request->email,

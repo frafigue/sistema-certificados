@@ -22,7 +22,11 @@
                 <p><strong>Condición:</strong> {{ $certificate->condition }}</p>
                 <p><strong>Fecha de Emisión:</strong> {{ $certificate->created_at->format('d/m/Y') }}</p>
                 <div class="text-center mt-4">
-                    <a href="{{ asset('storage/' . $certificate->pdf_path) }}" class="btn btn-primary" target="_blank">Descargar PDF</a>
+                    <a href="{{ route('certificates.download', $certificate->id) }}"
+                        class="btn btn-primary"
+                        target="_blank">
+                            Descargar PDF
+                    </a>
                 </div>
             </div>
         </div>

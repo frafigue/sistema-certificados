@@ -3,32 +3,56 @@
 namespace App\Imports\Sheets;
 
 use App\Jobs\GenerateCertificateJob;
+use App\Models\ImportHistory;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Bus\Batch;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithCalculatedFormulas;
-use Illuminate\Support\Facades\Bus;
-use Illuminate\Bus\Batch;
 use Throwable;
-
 
 class CertificatesSheetImport implements ToCollection, WithHeadingRow, WithCalculatedFormulas
 {
-    private int $importedCount = 0;
-    private array $errors = [];
+    private $importedCount = 0;
 
-    // 🔥 NUEVO
-    private ?string $batchId = null;
+    private $errors = [];
+
+    private $batchId = null;
 
     public function collection(Collection $rows)
     {
         $jobs = [];
 
+        // =========================================================
+        // 🔥 CREAR HISTORIAL IMPORTACIÓN
+        // =========================================================
+
+        $importHistory = ImportHistory::create([
+            'user_id'       => Auth::id(),
+            'file_name'     => null,
+            'total_rows'    => $rows->count(),
+            'processed_rows'=> 0,
+            'success_rows'  => 0,
+            'failed_rows'   => 0,
+            'status'        => 'processing',
+            'started_at'    => now(),
+        ]);
+
+        $importHistoryId = $importHistory->id;
+
+        // =========================================================
+        // 🔥 RECORRER FILAS
+        // =========================================================
+
         foreach ($rows as $index => $row) {
 
             try {
+
                 $data = [
+
                     'dni'                   => $row['dni'] ?? null,
                     'curso'                 => $row['curso'] ?? null,
                     'nota'                  => $row['nota'] ?? null,
@@ -43,11 +67,26 @@ class CertificatesSheetImport implements ToCollection, WithHeadingRow, WithCalcu
                     'cuv'                   => $row['cuv'] ?? null,
                 ];
 
-                if (empty($data['dni']) || empty($data['curso']) || empty($data['cuv'])) {
+                // =========================================================
+                // 🔥 VALIDACIÓN
+                // =========================================================
+
+                if (
+                    empty($data['dni']) ||
+                    empty($data['curso']) ||
+                    empty($data['cuv'])
+                ) {
                     continue;
                 }
 
-                $jobs[] = new GenerateCertificateJob($data);
+                // =========================================================
+                // 🔥 AGREGAR JOB
+                // =========================================================
+
+                $jobs[] = new GenerateCertificateJob(
+                    $data,
+                    $importHistoryId
+                );
 
                 $this->importedCount++;
 
@@ -56,43 +95,102 @@ class CertificatesSheetImport implements ToCollection, WithHeadingRow, WithCalcu
                 Log::error("Error en fila {$index}: " . $e->getMessage());
 
                 $this->errors[] = [
-                    'row' => $index,
-                    'error' => $e->getMessage()
+                    'row'   => $index,
+                    'error' => $e->getMessage(),
                 ];
             }
         }
 
+        // =========================================================
+        // 🔥 ENVIAR BATCH
+        // =========================================================
+
         if (!empty($jobs)) {
 
             $batch = Bus::batch($jobs)
-                ->then(function (Batch $batch) {
+
+                ->then(function (Batch $batch) use ($importHistoryId) {
+
+                    ImportHistory::where('id', $importHistoryId)
+                        ->update([
+
+                            'status'          => 'completed',
+
+                            'processed_rows'  => $batch->processedJobs(),
+
+                            'success_rows'    => $batch->processedJobs(),
+
+                            'failed_rows'     => $batch->failedJobs,
+
+                            'finished_at'     => now(),
+                        ]);
+
                     Log::info("✅ BATCH COMPLETADO: " . $batch->id);
                 })
-                ->catch(function (Batch $batch, Throwable $e) {
+
+                ->catch(function (Batch $batch, Throwable $e) use ($importHistoryId) {
+
+                    ImportHistory::where('id', $importHistoryId)
+                        ->update([
+
+                            'status'        => 'failed',
+
+                            'general_error' => $e->getMessage(),
+
+                            'failed_rows'   => $batch->failedJobs,
+
+                            'finished_at'   => now(),
+                        ]);
+
                     Log::error("❌ BATCH ERROR: " . $e->getMessage());
                 })
-                ->finally(function (Batch $batch) {
+
+                ->finally(function (Batch $batch) use ($importHistoryId) {
+
+                    ImportHistory::where('id', $importHistoryId)
+                        ->update([
+
+                            'processed_rows' => $batch->processedJobs(),
+
+                            'failed_rows'    => $batch->failedJobs,
+                        ]);
+
                     Log::info("📦 BATCH FINALIZADO");
                 })
+
                 ->dispatch();
+
+            // =========================================================
+            // 🔥 GUARDAR BATCH ID
+            // =========================================================
+
             Log::info('BATCH ID: ' . $batch->id);
-            // ✅ GUARDAR EN LA CLASE (NO EN SESSION)
+
             $this->batchId = $batch->id;
+
+            ImportHistory::where('id', $importHistoryId)
+                ->update([
+
+                    'batch_id' => $batch->id,
+                ]);
         }
     }
 
-    // 🔥 NUEVO
-    public function getBatchId(): ?string
+    // =========================================================
+    // 🔥 GETTERS
+    // =========================================================
+
+    public function getBatchId()
     {
         return $this->batchId;
     }
 
-    public function getImportedCount(): int
+    public function getImportedCount()
     {
         return $this->importedCount;
     }
 
-    public function getErrors(): array
+    public function getErrors()
     {
         return $this->errors;
     }

@@ -441,9 +441,19 @@ $(document).ready(function () {
             data:        formData,
             processData: false,
             contentType: false,
-            success: function (res) {
-                designs[currentSide].background = res.url;
-            },
+            //success: function (res) {
+              //  designs[currentSide].background = res.url;
+            //},
+            // DESPUÉS
+success: function (res) {
+    // Guardar siempre con el origen actual para consistencia en la sesión
+    try {
+        var parsed = new URL(res.url);
+        designs[currentSide].background = window.location.origin + parsed.pathname;
+    } catch(e) {
+        designs[currentSide].background = res.url;
+    }
+},
             error: function (xhr) {
                 var msg = 'No se pudo subir la imagen al servidor.';
                 if (xhr.responseJSON && xhr.responseJSON.message) msg += ' ' + xhr.responseJSON.message;
@@ -520,7 +530,7 @@ function switchSide(side) {
 // ════════════════════════════════════════════════════════════════════════════
 // Renderizado del canvas
 // ════════════════════════════════════════════════════════════════════════════
-function renderCanvas() {
+/*function renderCanvas() {
     var canvas = document.getElementById('canvas');
     var design = designs[currentSide];
 
@@ -532,6 +542,36 @@ function renderCanvas() {
     } else {
         canvas.style.backgroundImage = 'none';
         canvas.style.backgroundColor = '#ffffff';
+    }
+
+    $(canvas).find('.cert-element').remove();
+    design.elements.forEach(function (el) { appendElToCanvas(el); });
+}*/
+
+function renderCanvas() {
+    var canvas = document.getElementById('canvas');
+    var design = designs[currentSide];
+
+    // Siempre fondo blanco como base
+    canvas.style.backgroundColor = '#ffffff';
+
+    if (design.background) {
+        // Normalizar la URL del fondo: reemplazar cualquier origen
+        // (http://localhost, http://127.0.0.1:8000, etc.) por el origen actual.
+        // Así funciona sin importar desde qué dominio/puerto se sirva la app.
+        var bgUrl = design.background;
+        try {
+            var parsed = new URL(bgUrl);
+            bgUrl = window.location.origin + parsed.pathname;
+        } catch(e) {
+            // Si no es una URL absoluta, usarla tal cual (base64, relativa, etc.)
+        }
+        canvas.style.backgroundImage    = "url('" + bgUrl + "')";
+        canvas.style.backgroundSize     = 'cover';
+        canvas.style.backgroundPosition = 'center';
+        canvas.style.backgroundRepeat   = 'no-repeat';
+    } else {
+        canvas.style.backgroundImage = 'none';
     }
 
     $(canvas).find('.cert-element').remove();

@@ -10,6 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Mail\Mailables\Attachment;
+use Illuminate\Support\Facades\Storage;
 
 class CertificateSent extends Mailable
 {
@@ -51,7 +52,9 @@ class CertificateSent extends Mailable
     public function attachments(): array
     {
         return [
-            Attachment::fromStorageDisk('public', $this->certificate->pdf_path)
+                Attachment::fromPath(
+                Storage::disk('public')->path($this->certificate->pdf_path)
+                )
                 ->as('Certificado-' . $this->certificate->unique_code . '.pdf')
                 ->withMime('application/pdf'),
         ];

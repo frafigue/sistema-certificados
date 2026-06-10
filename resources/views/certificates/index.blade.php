@@ -21,12 +21,8 @@
         </div>
     </div>
     <div class="card-body">
-                {{-- ========================================= --}}
-        {{-- 🔥 PANEL PROGRESO BATCH --}}
-        {{-- ========================================= --}}
 
         @if(session('batch_id'))
-
         <div class="card card-info mb-3" id="batch-progress-card">
             <div class="card-header">
                 <h3 class="card-title">
@@ -34,48 +30,38 @@
                     Procesando certificados masivos
                 </h3>
             </div>
-
             <div class="card-body">
-
                 <div class="progress mb-3" style="height: 30px;">
                     <div
                         id="batch-progress-bar"
                         class="progress-bar progress-bar-striped progress-bar-animated bg-success"
                         role="progressbar"
-                        style="width: 0%"
-                    >
+                        style="width: 0%">
                         0%
                     </div>
                 </div>
-
                 <div class="row text-center">
-
                     <div class="col-md-3">
                         <h4 id="batch-total">0</h4>
                         <small>Total</small>
                     </div>
-
                     <div class="col-md-3">
                         <h4 id="batch-processed">0</h4>
                         <small>Procesados</small>
                     </div>
-
                     <div class="col-md-3">
                         <h4 id="batch-pending">0</h4>
                         <small>Pendientes</small>
                     </div>
-
                     <div class="col-md-3">
                         <h4 id="batch-failed">0</h4>
                         <small>Errores</small>
                     </div>
-
                 </div>
-
             </div>
         </div>
-
         @endif
+
         <form method="GET" action="{{ route('certificates.index') }}">
             <div class="row">
                 <div class="col-md-3">
@@ -94,8 +80,6 @@
                             value="{{ request('search_course') }}">
                     </div>
                 </div>
-
-                {{-- NUEVOS FILTROS --}}
                 <div class="col-md-3">
                     <div class="form-group">
                         <label>Área</label>
@@ -145,7 +129,6 @@
                 <a href="{{ route('certificate-generator.form') }}" class="btn btn-success ml-2">
                     <i class="fas fa-layer-group"></i> Generación Masiva
                 </a>
-                {{-- 🔥 BOTÓN ENVIAR PENDIENTES --}}
                 <form action="{{ route('certificates.sendPending') }}" method="POST" class="d-inline ml-2">
                     @csrf
                     <button type="submit" class="btn btn-warning">
@@ -189,9 +172,10 @@
                         <th>DNI Persona</th>
                         <th>Nombre Persona</th>
                         <th>Curso</th>
-                        <th>Area</th> {{-- ✅ NUEVO --}}
+                        <th>Area</th>
                         <th>Tipo</th>
                         <th>CUV</th>
+                        <th>Origen</th>
                         <th>Email</th>
                         <th>Enviado</th>
                         <th>Error</th>
@@ -210,20 +194,36 @@
                         <td>
                             @php
                                 $badgeColors = [
-                                    'Aprobado'     => 'success',
-                                    'Capacitador'  => 'primary',
-                                    'Asistente'    => 'secondary',
+                                    'Aprobado'    => 'success',
+                                    'Capacitador' => 'primary',
+                                    'Asistente'   => 'secondary',
                                 ];
-
                                 $color = $badgeColors[$certificate->condition] ?? 'dark';
                             @endphp
-
                             <span class="badge badge-{{ $color }}">
                                 {{ $certificate->condition }}
                             </span>
                         </td>
 
                         <td><code>{{ $certificate->unique_code }}</code></td>
+
+                        {{-- ORIGEN --}}
+                        <td>
+                            @if($certificate->import_history_id)
+                                <a href="{{ route('import-history.show', $certificate->import_history_id) }}"
+                                   class="badge badge-info"
+                                   style="color:#fff;"
+                                   title="Ver Importación #{{ $certificate->import_history_id }}"
+                                   data-toggle="tooltip">
+                                    <i class="fas fa-layer-group"></i> Masivo
+                                </a>
+                            @else
+                                <span class="badge badge-secondary">
+                                    <i class="fas fa-user"></i> Individual
+                                </span>
+                            @endif
+                        </td>
+
                         <td>
                             @if($certificate->email_status == 'pendiente')
                                 <span class="badge badge-warning">Pendiente</span>
@@ -235,22 +235,26 @@
                                 <span class="badge badge-secondary">—</span>
                             @endif
                         </td>
+
                         <td>
-                            {{ $certificate->email_sent_at 
-                                ? \Carbon\Carbon::parse($certificate->email_sent_at)->format('d/m/Y H:i') 
+                            {{ $certificate->email_sent_at
+                                ? \Carbon\Carbon::parse($certificate->email_sent_at)->format('d/m/Y H:i')
                                 : '—' }}
                         </td>
+
                         <td>
                             @if($certificate->email_error)
-                                <span title="{{ $certificate->email_error }}">
+                                <span title="{{ $certificate->email_error }}"
+                                      data-toggle="tooltip">
                                     ⚠
                                 </span>
                             @else
                                 —
                             @endif
                         </td>
+
                         <td class="d-flex align-items-center">
-                            <a href="{{ asset('storage/' . $certificate->pdf_path) }}"
+                            <a href="{{ route('certificates.download', $certificate->id) }}"
                                target="_blank"
                                class="btn btn-sm btn-info mr-1" title="Ver PDF">
                                 <i class="fas fa-file-pdf"></i>
@@ -280,7 +284,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="11" class="text-center text-muted">
+                        <td colspan="12" class="text-center text-muted">
                             <i class="fas fa-certificate fa-2x mb-2 d-block"></i>
                             No hay certificados que coincidan con la búsqueda.
                         </td>
@@ -297,24 +301,23 @@
     </div>
 
 </div>
+
 @stop
 
 @section('js')
-
 <script>
-
 $(document).ready(function () {
+
+    // Tooltips
+    $('[data-toggle="tooltip"]').tooltip();
 
     /*
     |--------------------------------------------------------------------------
-    | 🔥 ELIMINAR CERTIFICADO
+    | ELIMINAR CERTIFICADO
     |--------------------------------------------------------------------------
     */
-
     $('.card-body').on('click', '.btn-delete', function (e) {
-
         e.preventDefault();
-
         var form = $(this).closest('form');
 
         Swal.fire({
@@ -327,117 +330,63 @@ $(document).ready(function () {
             confirmButtonText: 'Sí, eliminar',
             cancelButtonText: 'Cancelar',
             reverseButtons: true,
-
         }).then((result) => {
-
             if (result.isConfirmed) {
-
                 Swal.fire({
-
                     title: 'Confirmación final',
-
                     html: 'Para confirmar, escribí <strong>ELIMINAR</strong>.',
-
                     input: 'text',
-
                     icon: 'warning',
-
                     showCancelButton: true,
-
                     confirmButtonText: 'Confirmar',
-
                     cancelButtonText: 'Cancelar',
-
                     reverseButtons: true,
-
                     inputValidator: (value) => {
-
                         if (value !== 'ELIMINAR') {
                             return 'La palabra no coincide. Eliminación cancelada.';
                         }
-
                     }
-
                 }).then((result2) => {
-
                     if (result2.isConfirmed) {
                         form.submit();
                     }
-
                 });
-
             }
-
         });
-
     });
 
     /*
     |--------------------------------------------------------------------------
-    | 🔥 BATCH EN VIVO
+    | BATCH EN VIVO
     |--------------------------------------------------------------------------
     */
-
     @if(session('batch_id'))
-
         let batchId = "{{ session('batch_id') }}";
-
         console.log('🔥 Batch ID:', batchId);
 
-        /*
-        |--------------------------------------------------------------------------
-        | 🔥 CONSULTAR CADA 2 SEGUNDOS
-        |--------------------------------------------------------------------------
-        */
-
         let interval = setInterval(function () {
-
             $.ajax({
-
                 url: "/batch-status/" + batchId,
-
                 type: "GET",
-
                 success: function (response) {
-
                     console.log(response);
 
-                    let progress  = response.progress;
-                    let total     = response.total;
-                    let processed = response.processed;
-                    let pending   = response.pending;
-                    let failed    = response.failed;
-                    let finished  = response.finished;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | 🔥 ACTUALIZAR BARRA
-                    |--------------------------------------------------------------------------
-                    */
+                    let data      = response.data ?? response;
+                    let progress  = data.progress      ?? 0;
+                    let total     = data.total_jobs    ?? 0;
+                    let processed = data.processed_jobs ?? 0;
+                    let pending   = data.pending_jobs   ?? 0;
+                    let failed    = data.failed_jobs    ?? 0;
+                    let finished  = data.finished       ?? false;
 
                     $('#batch-progress-bar')
                         .css('width', progress + '%')
                         .text(progress + '%');
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | 🔥 ACTUALIZAR MÉTRICAS
-                    |--------------------------------------------------------------------------
-                    */
-
                     $('#batch-total').text(total);
-
                     $('#batch-processed').text(processed);
-
                     $('#batch-pending').text(pending);
-
                     $('#batch-failed').text(failed);
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | 🔥 CUANDO TERMINA
-                    |--------------------------------------------------------------------------
-                    */
 
                     if (finished) {
                         clearInterval(interval);
@@ -445,40 +394,29 @@ $(document).ready(function () {
                             .removeClass('progress-bar-animated')
                             .removeClass('bg-success')
                             .addClass(failed > 0 ? 'bg-warning' : 'bg-primary');
+
                         Swal.fire({
                             icon: failed > 0 ? 'warning' : 'success',
                             title: failed > 0
                                 ? 'Proceso finalizado con errores'
                                 : 'Proceso completado',
                             html:
-                                '<b>Total:</b> ' + total + '<br>' +
+                                '<b>Total:</b> '      + total     + '<br>' +
                                 '<b>Procesados:</b> ' + processed + '<br>' +
-                                '<b>Errores:</b> ' + failed,
+                                '<b>Errores:</b> '    + failed,
                             confirmButtonText: 'Aceptar'
                         }).then(() => {
-                            // 🔥 RECARGAR TABLA
                             location.reload();
-
                         });
-
                     }
-
                 },
-
                 error: function (xhr) {
-
                     console.error(xhr);
-
                 }
-
             });
-
         }, 2000);
-
     @endif
 
 });
-
 </script>
-
 @stop

@@ -97,8 +97,7 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="objetivo">Objetivo</label>
+                {{-- <label for="objetivo">Objetivo</label>
                     <textarea name="objetivo" class="form-control" rows="3">{{ old('objetivo', $course->objetivo) }}</textarea>
                 </div>
 
@@ -107,7 +106,7 @@
                     <textarea name="contenido" class="form-control" rows="3">{{ old('contenido', $course->contenido) }}</textarea>
                 </div>
 
-                <hr>
+                <hr>--}}
                 
                 {{-- SECCIÓN DE RESPONSABLES DINÁMICOS --}}
                 <div class="d-flex justify-content-between align-items-center mb-3">
