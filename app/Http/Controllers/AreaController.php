@@ -189,8 +189,11 @@ class AreaController extends Controller
         $designFront = $this->sanitizeDesignBase64($designFront, $area, 'front');
         $designBack  = $this->sanitizeDesignBase64($designBack,  $area, 'back');
 
-        $templateFront = $this->buildHtmlFromDesign($designFront);
-        $templateBack  = $this->buildHtmlFromDesign($designBack);
+        // ⭐ Usar el Service que convierte imágenes a base64
+        $service = app(\App\Services\CertificateService::class);
+
+        $templateFront = $service->buildHtmlFromDesign($designFront);
+        $templateBack  = $service->buildHtmlFromDesign($designBack);
 
         $area->update([
             'template_front' => $templateFront,
@@ -203,6 +206,7 @@ class AreaController extends Controller
 
     public function previewFromDesign(Request $request, Area $area)
     {
+        set_time_limit(120);
         ini_set('memory_limit', '512M');
 
         $user = Auth::user();
@@ -228,15 +232,17 @@ class AreaController extends Controller
         [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($area, 'livepreview_' . time());
 
         try {
-            $templateFront = $this->buildHtmlFromDesign($designFront);
+            // ⭐ USAR EL SERVICE QUE SÍ CONVIERTE IMÁGENES A BASE64
+            $service = app(\App\Services\CertificateService::class);
+
+            $templateFront = $service->buildHtmlFromDesign($designFront);
             $htmlFront     = Blade::render($templateFront, $data);
             unset($templateFront);
 
-            // Dorso: solo si tiene contenido
             $backEmpty = empty($designBack['elements']) && empty($designBack['background']);
             $htmlBack  = null;
             if (!$backEmpty) {
-                $templateBack = $this->buildHtmlFromDesign($designBack);
+                $templateBack = $service->buildHtmlFromDesign($designBack);
                 $htmlBack     = Blade::render($templateBack, $data);
                 unset($templateBack);
             }
@@ -254,6 +260,7 @@ class AreaController extends Controller
 
     public function previewTemplate(Area $area)
     {
+        set_time_limit(120);
         ini_set('memory_limit', '512M');
 
         $user = Auth::user();
@@ -268,9 +275,12 @@ class AreaController extends Controller
         $designFront = $this->extractDesignFromTemplate($area->template_front);
         $designBack  = $this->extractDesignFromTemplate($area->template_back);
 
+        // ⭐ USAR EL SERVICE QUE SÍ CONVIERTE IMÁGENES A BASE64
+        $service = app(\App\Services\CertificateService::class);
+
         if ($designFront && $designBack) {
-            $templateFront = $this->buildHtmlFromDesign($designFront);
-            $templateBack  = $this->buildHtmlFromDesign($designBack);
+            $templateFront = $service->buildHtmlFromDesign($designFront);
+            $templateBack  = $service->buildHtmlFromDesign($designBack);
         } else {
             $templateFront = $area->template_front;
             $templateBack  = $area->template_back;
@@ -282,9 +292,8 @@ class AreaController extends Controller
             $htmlFront = Blade::render($templateFront, $data);
             unset($templateFront);
 
-            // Dorso: solo si tiene contenido
             $backEmpty = empty($designBack) ||
-                         (empty($designBack['elements']) && empty($designBack['background']));
+                        (empty($designBack['elements']) && empty($designBack['background']));
             $htmlBack  = null;
             if (!$backEmpty && !empty($templateBack)) {
                 $htmlBack = Blade::render($templateBack, $data);
@@ -417,6 +426,9 @@ class AreaController extends Controller
      * exactamente el espacio que DomPDF usa para A4 landscape a 96dpi.
      *
      * Por lo tanto NO se aplica ningún factor de escala aquí.
+     *
+     * ⚠️ NOTA: Este método queda sin usar tras el fix. Se mantiene por
+     * compatibilidad. La versión activa vive en CertificateService.
      * ────────────────────────────────────────────────────────────────────────
      */
     private function buildHtmlFromDesign(array $design): string
