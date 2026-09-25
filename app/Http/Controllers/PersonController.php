@@ -23,7 +23,6 @@ class PersonController extends Controller
         $user  = Auth::user();
         $query = Person::query();
 
-        // ✅ Filtrar por área via tabla pivot
         if ($user->role?->name === 'Administrador' && $user->area_id) {
             $query->whereHas('areas', function($q) use ($user) {
                 $q->where('areas.id', $user->area_id);
@@ -73,10 +72,12 @@ class PersonController extends Controller
 
         $existingPerson = Person::where('dni', $data['dni'])->first();
 
-        // ✅ CASO: DNI ya existe
+        // =========================================================
+        // CASO 1: DNI ya existe
+        // Solo agregar al área. NO tocar el email.
+        // =========================================================
         if ($existingPerson) {
 
-            // ✅ Verificar si ya está en esta área via pivot
             $yaEnEstaArea = $existingPerson->areas()
                 ->where('areas.id', $data['area_id'])
                 ->exists();
@@ -87,7 +88,7 @@ class PersonController extends Controller
                     ->withInput();
             }
 
-            // ✅ Agregar a la nueva área via pivot — sin tocar area_id original
+            // Solo agregar al área nueva
             $existingPerson->areas()->attach($data['area_id']);
 
             $areaNueva = Area::find($data['area_id']);
@@ -95,18 +96,22 @@ class PersonController extends Controller
                 ->with('success', "La persona {$existingPerson->nombre} {$existingPerson->apellido} fue agregada al área \"{$areaNueva->nombre}\" exitosamente.");
         }
 
-        // ✅ CASO: Email ya existe en otra persona
+        // =========================================================
+        // CASO 2: DNI nuevo — validar emails únicos
+        // =========================================================
+
         if (Person::whereRaw('LOWER(email) = ?', [$data['email']])->exists()) {
             return back()->withErrors(['email' => 'El email ya está asignado a otra persona.'])->withInput();
         }
 
-        // ✅ CASO: Email ya existe en usuarios del sistema
         if (User::whereRaw('LOWER(email) = ?', [$data['email']])->exists()) {
             return back()->withErrors(['email' => 'El email ya está en uso por otro usuario del sistema.'])->withInput();
         }
 
-        // ✅ CASO: Persona nueva — crear normalmente
-        $person      = Person::create($data);
+        // =========================================================
+        // CASO 3: Persona nueva — crear normalmente
+        // =========================================================
+        $person = Person::create($data);
         $personaRole = Role::where('name', 'Persona')->first();
 
         if ($personaRole) {
@@ -121,14 +126,11 @@ class PersonController extends Controller
             $person->save();
         }
 
-        // ✅ Registrar en tabla pivot también
         $person->areas()->attach($data['area_id']);
 
         return redirect()->route('persons.index')
             ->with('success', 'Persona y cuenta de usuario creadas exitosamente.');
     }
-
-    
 
     public function showImportForm()
     {
@@ -375,6 +377,7 @@ class PersonController extends Controller
         $person->delete();
         return redirect()->route('persons.index')->with('success', 'Persona eliminada exitosamente.');
     }
+
     public function bulkDestroy(Request $request)
     {
         $user = Auth::user();
@@ -386,12 +389,10 @@ class PersonController extends Controller
         }
 
         $persons = Person::whereIn('id', $ids)->get();
-
-        $error = false; // 👈 NUEVO
+        $error = false;
 
         foreach ($persons as $person) {
 
-            // 🔒 Validar área
             if ($user->role?->name === 'Administrador') {
                 $pertenece = $person->areas()
                     ->where('areas.id', $user->area_id)
@@ -402,27 +403,22 @@ class PersonController extends Controller
                 }
             }
 
-            // ❌ Si tiene certificados → NO eliminar
             if ($person->certificates()->count() > 0) {
-                $error = true; // 👈 MARCAMOS ERROR
+                $error = true;
                 continue;
             }
 
-            // 🔹 Eliminación
             if ($user->role?->name === 'Administrador') {
-
                 $person->areas()->detach($user->area_id);
 
                 if ($person->areas()->count() === 0) {
                     $person->delete();
                 }
-
             } else {
                 $person->delete();
             }
         }
 
-        // 👇 ACÁ ESTÁ LA CLAVE
         if ($error) {
             return redirect()->route('persons.index')
                 ->with('error', 'No se pudo eliminar una o más personas porque tienen certificados asociados.');
