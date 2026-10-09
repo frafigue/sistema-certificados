@@ -28,10 +28,14 @@ class CertificatesSheetImport implements ToCollection, WithHeadingRow, WithCalcu
 
         // =========================================================
         // 🔥 CREAR HISTORIAL IMPORTACIÓN
+        // Generar batch_id único ANTES de crear el ImportHistory
         // =========================================================
 
+        $this->batchId = (string) \Illuminate\Support\Str::uuid();
+	
         $importHistory = ImportHistory::create([
             'user_id'       => Auth::id(),
+            'batch_id'      => $this->batchId,
             'file_name'     => null,
             'total_rows'    => $rows->count(),
             'processed_rows'=> 0,
@@ -167,12 +171,7 @@ class CertificatesSheetImport implements ToCollection, WithHeadingRow, WithCalcu
             Log::info('BATCH ID: ' . $batch->id);
 
             $this->batchId = $batch->id;
-
-            ImportHistory::where('id', $importHistoryId)
-                ->update([
-
-                    'batch_id' => $batch->id,
-                ]);
+            
         }
     }
 

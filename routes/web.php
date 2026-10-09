@@ -23,7 +23,7 @@ use App\Http\Controllers\ImportHistoryController;
 */
 
 Route::get('/', [ConsultaPublicaController::class, 'mostrarFormulario'])->name('consulta.home');
-Route::post('/', [ConsultaPublicaController::class, 'buscarCertificados'])->name('certificados.buscar');
+Route::post('', [ConsultaPublicaController::class, 'buscarCertificados'])->name('certificados.buscar');
 Route::get('/certificados/resultado', [ConsultaPublicaController::class, 'mostrarResultados'])->name('certificados.resultado');
 Route::get('/certificados/publico/descargar/{id}', [ConsultaPublicaController::class, 'descargarCertificado'])->name('certificados.descargar.publico');
 Route::get('/certificates/verify/{unique_code}', [CertificateController::class, 'verify'])->name('certificates.verify');

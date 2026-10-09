@@ -4,10 +4,9 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Pagination\Paginator;
 use App\Models\User;
-
-// 🔥 AGREGAR ESTOS
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
 
@@ -20,6 +19,12 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // ✅ Forzar HTTPS y root URL con el prefijo /certificados
+        if (config('app.env') === 'production') {
+            URL::forceScheme('https');
+        }
+        URL::forceRootUrl(rtrim(config('app.url'), '/') . '/');
+
         // ✅ Bootstrap pagination
         Paginator::useBootstrap();
 
@@ -36,9 +41,9 @@ class AppServiceProvider extends ServiceProvider
             return $user->role->name === 'Persona';
         });
 
-        // 🔥 PASO 5 — RATE LIMIT EMAILS
+        // 🔥 RATE LIMIT EMAILS
         RateLimiter::for('emails', function () {
-            return Limit::perMinute(30); // 🔧 podés ajustar esto
+            return Limit::perMinute(30);
         });
     }
 }

@@ -256,7 +256,7 @@
 
             <h2 class="search-title">Ingrese su DNI o su Nombre y Apellido para iniciar la búsqueda</h2>
 
-            <form method="POST" action="{{ route('certificados.buscar') }}">
+                <form method="POST" action="{{ route('certificados.buscar') }}/">
                 @csrf
                 <div class="form-group">
                     <label for="dni">DNI (Opcional)</label>
