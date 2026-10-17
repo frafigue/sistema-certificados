@@ -9,25 +9,31 @@
 @section('content')
     <p>Bienvenido al panel de administración del sistema de certificados.</p>
 
-    {{-- Fila de Tarjetas de Resumen --}}
-    <div class="row">
-        {{-- Tarjeta de Resoluciones --}}
-        <div class="col-lg-3 col-6">
-            <div class="small-box bg-info">
-                <div class="inner">
-                    <h3>...</h3>
-                    <p>Resoluciones</p>
-                </div>
-                <div class="icon">
-                    <i class="fas fa-file-alt"></i>
-                </div>
-                <a href="{{ route('resolutions.index') }}" class="small-box-footer">
-                    Gestionar <i class="fas fa-arrow-circle-right"></i>
-                </a>
-            </div>
-        </div>
+    @php
+        $roleName = auth()->user()->role->name;
+    @endphp
 
-        {{-- Tarjeta de Cursos --}}
+    <div class="row">
+
+        {{-- Tarjeta de Resoluciones (Root y Admin) --}}
+        @if(in_array($roleName, ['Root', 'Administrador']))
+            <div class="col-lg-3 col-6">
+                <div class="small-box bg-info">
+                    <div class="inner">
+                        <h3>...</h3>
+                        <p>Resoluciones</p>
+                    </div>
+                    <div class="icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <a href="{{ route('resolutions.index') }}" class="small-box-footer">
+                        Gestionar <i class="fas fa-arrow-circle-right"></i>
+                    </a>
+                </div>
+            </div>
+        @endif
+
+        {{-- Tarjeta de Cursos (Todos los roles del sistema) --}}
         <div class="col-lg-3 col-6">
             <div class="small-box bg-success">
                 <div class="inner">
@@ -43,23 +49,25 @@
             </div>
         </div>
 
-        {{-- Tarjeta de Personas (próximamente) --}}
-        <div class="col-lg-3 col-6">
-            <div class="small-box bg-warning">
-                <div class="inner">
-                    <h3>...</h3>
-                    <p>Usuarios Finales</p>
+        {{-- Tarjeta de Usuarios Finales (Solo Root) --}}
+        @if($roleName === 'Root')
+            <div class="col-lg-3 col-6">
+                <div class="small-box bg-warning">
+                    <div class="inner">
+                        <h3>...</h3>
+                        <p>Usuarios Finales</p>
+                    </div>
+                    <div class="icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <a href="{{ route('users.index') }}" class="small-box-footer">
+                        Gestionar <i class="fas fa-arrow-circle-right"></i>
+                    </a>
                 </div>
-                <div class="icon">
-                    <i class="fas fa-users"></i>
-                </div>
-                <a href="#" class="small-box-footer">
-                    Gestionar <i class="fas fa-arrow-circle-right"></i>
-                </a>
             </div>
-        </div>
+        @endif
 
-        {{-- Tarjeta de Certificados (próximamente) --}}
+        {{-- Tarjeta de Certificados (Todos los roles del sistema) --}}
         <div class="col-lg-3 col-6">
             <div class="small-box bg-danger">
                 <div class="inner">
@@ -69,7 +77,7 @@
                 <div class="icon">
                     <i class="fas fa-certificate"></i>
                 </div>
-                <a href="#" class="small-box-footer">
+                <a href="{{ route('certificates.index') }}" class="small-box-footer">
                     Gestionar <i class="fas fa-arrow-circle-right"></i>
                 </a>
             </div>

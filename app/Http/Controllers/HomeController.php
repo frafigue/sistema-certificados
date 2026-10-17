@@ -16,14 +16,17 @@ class HomeController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->role->name === 'Root' || $user->role->name === 'Administrador') {
+        // Root, Administrador y Gestor ven el dashboard
+        if (in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
             return view('home');
         }
 
+        // Persona ve su dashboard
         if ($user->role->name === 'Persona') {
             return redirect()->route('persona.dashboard');
         }
 
+        // Otros (por defecto)
         return view('welcome');
     }
 }
