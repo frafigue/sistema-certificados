@@ -145,10 +145,21 @@ return [
             'can'   => 'is-admin-or-root',
         ],
         [
-            'text'  => 'Áreas',
-            'route' => 'areas.index',
-            'icon'  => 'fas fa-fw fa-sitemap',
-            'can'   => 'is-admin-or-root',
+            'text'    => 'Áreas',
+            'icon'    => 'fas fa-fw fa-sitemap',
+            'can'     => 'is-admin-or-root',
+            'submenu' => [
+                [
+                    'text'  => 'Listado de Áreas',
+                    'route' => 'areas.index',
+                    'icon'  => 'fas fa-fw fa-list',
+                ],
+                [
+                    'text'  => 'Subáreas',
+                    'route' => 'subareas.index',
+                    'icon'  => 'fas fa-fw fa-layer-group',
+                ],
+            ],
         ],
         [
             'text'  => 'Cursos',
