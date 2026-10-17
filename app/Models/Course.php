@@ -47,4 +47,19 @@ class Course extends Model
     {
         return $this->hasMany(CourseResponsable::class)->orderBy('orden');
     }
+        /**
+     * Subárea a la que pertenece este curso (nullable)
+     */
+    public function subarea()
+    {
+        return $this->belongsTo(Subarea::class);
+    }
+
+    /**
+     * Plantilla de certificado usada por este curso (nullable)
+     */
+    public function template()
+    {
+        return $this->belongsTo(CertificateTemplate::class, 'template_id');
+    }
 }

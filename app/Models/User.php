@@ -55,4 +55,27 @@ class User extends Authenticatable
     {
         return $this->activo === true;
     }
+        /**
+     * Subárea asignada (para gestores)
+     */
+    public function subarea()
+    {
+        return $this->belongsTo(Subarea::class);
+    }
+
+    /**
+     * Subáreas que este usuario gestiona
+     */
+    public function subareasGestionadas()
+    {
+        return $this->hasMany(Subarea::class, 'gestor_id');
+    }
+
+    /**
+     * Subáreas que este usuario creó
+     */
+    public function subareasCreadas()
+    {
+        return $this->hasMany(Subarea::class, 'created_by');
+    }
 }

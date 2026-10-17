@@ -92,4 +92,19 @@ class Certificate extends Model
     {
         return $this->belongsTo(ImportHistory::class);
     }
+        /**
+     * Subárea a la que pertenece este certificado (nullable)
+     */
+    public function subarea()
+    {
+        return $this->belongsTo(Subarea::class);
+    }
+
+    /**
+     * Plantilla usada para este certificado (nullable)
+     */
+    public function template()
+    {
+        return $this->belongsTo(CertificateTemplate::class, 'template_id');
+    }
 }

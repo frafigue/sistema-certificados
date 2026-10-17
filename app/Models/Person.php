@@ -52,4 +52,11 @@ class Person extends Model
     {
         return $this->belongsToMany(\App\Models\Area::class, 'area_person');
     }
+        /**
+     * Subárea a la que pertenece esta persona (nullable)
+     */
+    public function subarea()
+    {
+        return $this->belongsTo(Subarea::class);
+    }
 }
