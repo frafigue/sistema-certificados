@@ -15,6 +15,7 @@ use App\Http\Controllers\ConsultaPublicaController;
 use App\Http\Controllers\UnifiedImportController;
 use App\Http\Controllers\CertificateExcelGeneratorController;
 use App\Http\Controllers\ImportHistoryController;
+use App\Http\Controllers\SubareaController;
 
 /*
 |--------------------------------------------------------------------------
@@ -129,6 +130,10 @@ Route::middleware('auth')->group(function () {
     Route::resource('resolutions', ResolutionController::class);
     Route::resource('courses', CourseController::class);
     Route::resource('areas', AreaController::class);
+    // Rutas de subáreas (solo Root y Admin)
+    Route::middleware('auth')->group(function () {
+        Route::resource('subareas', SubareaController::class);
+    });
 
     /*
     |--------------------------------------------------------------------------
