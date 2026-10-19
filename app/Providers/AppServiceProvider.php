@@ -37,6 +37,10 @@ class AppServiceProvider extends ServiceProvider
             return in_array($user->role->name, ['Administrador', 'Root']);
         });
 
+        Gate::define('is-admin-or-root-or-gestor', function (User $user) {
+            return in_array($user->role->name, ['Administrador', 'Root', 'Gestor']);
+        });
+
         Gate::define('is-persona', function (User $user) {
             return $user->role->name === 'Persona';
         });

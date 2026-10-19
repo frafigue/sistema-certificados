@@ -16,26 +16,34 @@ class CourseController extends Controller
 {
     public function index(Request $request)
     {
-        $user  = Auth::user();
-        $query = Course::query();
+            $user  = Auth::user();
+            $query = Course::query();
 
-        if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
-            $query->where('area_id', $user->area_id);
-        }
+            // Root ve todo
+            // Admin ve su área
+            // Gestor ve su subárea
+            // Persona no ve nada
+            if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
+                $query->where('area_id', $user->area_id);
+            } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+                $query->where('subarea_id', $user->subarea_id);
+            } elseif ($user->role && $user->role->name === 'Persona') {
+                $query->where('id', 0); // No ve cursos
+            }
 
-        if ($request->filled('nombre')) {
-            $query->where('nombre', 'like', '%' . $request->nombre . '%');
-        }
-        if ($request->filled('nro_curso')) {
-            $query->where('nro_curso', 'like', '%' . $request->nro_curso . '%');
-        }
+            if ($request->filled('nombre')) {
+                $query->where('nombre', 'like', '%' . $request->nombre . '%');
+            }
+            if ($request->filled('nro_curso')) {
+                $query->where('nro_curso', 'like', '%' . $request->nro_curso . '%');
+            }
 
-        $courses = $query->with(['resolution', 'area', 'responsables'])
-                     ->latest()
-                     ->paginate(10)
-                     ->withQueryString();
+            $courses = $query->with(['resolution', 'area', 'responsables'])
+                        ->latest()
+                        ->paginate(10)
+                        ->withQueryString();
 
-        return view('courses.index', compact('courses'));
+            return view('courses.index', compact('courses'));
     }
 
     public function create()
@@ -45,6 +53,11 @@ class CourseController extends Controller
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $resolutions = Resolution::where('area_id', $user->area_id)->get();
             $areas       = Area::where('id', $user->area_id)->get();
+        } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            // Gestor: solo las resoluciones y áreas de su subárea
+            $subarea     = $user->subarea;
+            $areas       = Area::where('id', $subarea->area_id)->get();
+            $resolutions = Resolution::where('area_id', $subarea->area_id)->get();
         } else {
             $resolutions = Resolution::all();
             $areas       = Area::all();
@@ -77,6 +90,7 @@ class CourseController extends Controller
             'responsables.*.signature' => 'nullable|image|mimes:png|max:2048',
         ]);
 
+       // Validación para Admin
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($data['area_id'] != $user->area_id) {
                 return redirect()->back()
@@ -91,10 +105,27 @@ class CourseController extends Controller
             }
         }
 
+        // Validación para Gestor
+        if ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            if ($data['area_id'] != $subarea->area_id) {
+                return redirect()->back()
+                    ->withErrors(['area_id' => 'No tienes permisos para crear cursos en esta área.'])
+                    ->withInput();
+            }
+            $resolution = Resolution::findOrFail($data['resolution_id']);
+            if ($resolution->area_id != $subarea->area_id) {
+                return redirect()->back()
+                    ->withErrors(['resolution_id' => 'No tienes permisos para usar esta resolución.'])
+                    ->withInput();
+            }
+        }
+
         DB::beginTransaction();
         try {
             $course = Course::create([
                 'area_id'       => $data['area_id'],
+                'subarea_id'    => $user->subarea_id ?? null,  // ← NUEVO
                 'nro_curso'     => $data['nro_curso'],
                 'nombre'        => $data['nombre'],
                 'periodo'       => $data['periodo'],
@@ -143,6 +174,12 @@ class CourseController extends Controller
             }
         }
 
+        if ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            if ($course->subarea_id != $user->subarea_id) {
+                abort(403, 'No tienes permisos para ver este curso.');
+            }
+        }
+
         $course->load('responsables');
         return view('courses.show', compact('course'));
     }
@@ -153,13 +190,23 @@ class CourseController extends Controller
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($course->area_id != $user->area_id) {
-                abort(403, 'No tienes permisos para editar este curso.');
+                abort(403, 'No tienes permisos para ver este curso.');
+            }
+        }
+
+        if ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            if ($course->subarea_id != $user->subarea_id) {
+                abort(403, 'No tienes permisos para ver este curso.');
             }
         }
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $resolutions = Resolution::where('area_id', $user->area_id)->get();
             $areas       = Area::where('id', $user->area_id)->get();
+        } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            $subarea     = $user->subarea;
+            $areas       = Area::where('id', $subarea->area_id)->get();
+            $resolutions = Resolution::where('area_id', $subarea->area_id)->get();
         } else {
             $resolutions = Resolution::all();
             $areas       = Area::all();
@@ -175,7 +222,13 @@ class CourseController extends Controller
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($course->area_id != $user->area_id) {
-                abort(403, 'No tienes permisos para actualizar este curso.');
+                abort(403, 'No tienes permisos para ver este curso.');
+            }
+        }
+
+        if ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            if ($course->subarea_id != $user->subarea_id) {
+                abort(403, 'No tienes permisos para ver este curso.');
             }
         }
 
@@ -300,7 +353,13 @@ class CourseController extends Controller
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($course->area_id != $user->area_id) {
-                abort(403, 'No tienes permisos para eliminar este curso.');
+                abort(403, 'No tienes permisos para ver este curso.');
+            }
+        }
+
+        if ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            if ($course->subarea_id != $user->subarea_id) {
+                abort(403, 'No tienes permisos para ver este curso.');
             }
         }
 

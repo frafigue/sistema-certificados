@@ -27,6 +27,8 @@ class PersonController extends Controller
             $query->whereHas('areas', function($q) use ($user) {
                 $q->where('areas.id', $user->area_id);
             });
+        } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $query->where('subarea_id', $user->subarea_id);
         }
 
         if ($request->filled('dni')) {
@@ -35,7 +37,7 @@ class PersonController extends Controller
         if ($request->filled('nombre')) {
             $query->where(function($q) use ($request) {
                 $q->where('nombre', 'like', '%' . $request->nombre . '%')
-                  ->orWhere('apellido', 'like', '%' . $request->nombre . '%');
+                ->orWhere('apellido', 'like', '%' . $request->nombre . '%');
             });
         }
 
@@ -50,6 +52,9 @@ class PersonController extends Controller
 
         if ($user->role?->name === 'Administrador') {
             $areas = Area::where('id', $user->area_id)->get();
+        } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            $areas   = Area::where('id', $subarea->area_id)->get();
         }
 
         return view('persons.create', compact('areas'));
@@ -57,6 +62,7 @@ class PersonController extends Controller
 
     public function store(Request $request)
     {
+        $user = Auth::user();  // ← AGREGAR ESTA LÍNEA
         $request->merge(['email' => strtolower(trim($request->email))]);
 
         $data = $request->validate([
@@ -115,7 +121,7 @@ class PersonController extends Controller
         $personaRole = Role::where('name', 'Persona')->first();
 
         if ($personaRole) {
-            $user = User::create([
+            $nuevoUsuario = User::create([
                 'name'     => $person->nombre . ' ' . $person->apellido,
                 'email'    => $person->email,
                 'password' => Hash::make($person->dni),
@@ -127,6 +133,13 @@ class PersonController extends Controller
         }
 
         $person->areas()->attach($data['area_id']);
+        
+
+        // Si es Gestor, asignar la subárea
+        if ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $person->subarea_id = $user->subarea_id;
+            $person->save();
+        }
 
         return redirect()->route('persons.index')
             ->with('success', 'Persona y cuenta de usuario creadas exitosamente.');
@@ -330,12 +343,22 @@ class PersonController extends Controller
 
     public function edit(Person $person)
     {
+        $user  = Auth::user();
         $areas = Area::all();
+
+        if ($user->role?->name === 'Administrador' && $user->area_id) {
+            $areas = Area::where('id', $user->area_id)->get();
+        } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            $areas   = Area::where('id', $subarea->area_id)->get();
+        }
+
         return view('persons.edit', compact('person', 'areas'));
     }
 
     public function update(Request $request, Person $person)
     {
+        $user = Auth::user();
         $request->merge(['email' => strtolower(trim($request->email))]);
 
         $data = $request->validate([
@@ -350,6 +373,13 @@ class PersonController extends Controller
         ]);
 
         $person->update($data);
+
+        // Si es Gestor, asignar la subárea
+        if ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $person->subarea_id = $user->subarea_id;
+            $person->save();
+        }
+
         return redirect()->route('persons.index')->with('success', 'Persona actualizada exitosamente.');
     }
 

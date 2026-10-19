@@ -171,7 +171,7 @@ return [
             'text'  => 'Personas',
             'route' => 'persons.index',
             'icon'  => 'fas fa-fw fa-users',
-            'can'   => 'is-admin-or-root',
+            'can'   => 'is-admin-or-root-or-gestor',
         ],
         [
             'text'  => 'Certificados',

@@ -18,6 +18,7 @@ class User extends Authenticatable
         'password',
         'role_id',
         'area_id',
+        'subarea_id',   // ← AGREGAR
         'activo', // ✅ NUEVO
     ];
 

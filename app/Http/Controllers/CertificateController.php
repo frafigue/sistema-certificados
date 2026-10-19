@@ -368,6 +368,7 @@ HTML;
         $query = Certificate::query();
         $user  = Auth::user();
 
+        // Persona: solo sus certificados
         if ($user->role && $user->role->name === 'Persona') {
             if ($user->person) {
                 $query->where('person_id', $user->person->id);
@@ -376,12 +377,21 @@ HTML;
             }
         }
 
+        // Admin: certificados de su área
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $query->whereHas('course', function ($q) use ($user) {
                 $q->where('area_id', $user->area_id);
             });
         }
 
+        // Gestor: certificados de su subárea
+        if ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            $query->whereHas('course', function ($q) use ($user) {
+                $q->where('subarea_id', $user->subarea_id);
+            });
+        }
+
+        // ... filtros de búsqueda (sin cambios)
         if ($request->filled('search_dni')) {
             $query->whereHas('person', function ($q) use ($request) {
                 $q->where('dni', 'like', '%' . $request->search_dni . '%');
@@ -402,11 +412,16 @@ HTML;
             $query->where('condition', $request->search_tipo);
         }
 
+        // Tipos disponibles filtrados
         $tiposQuery = Certificate::select('condition')->distinct()->orderBy('condition');
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $tiposQuery->whereHas('course', function ($q) use ($user) {
                 $q->where('area_id', $user->area_id);
+            });
+        } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            $tiposQuery->whereHas('course', function ($q) use ($user) {
+                $q->where('subarea_id', $user->subarea_id);
             });
         }
 
