@@ -8,7 +8,7 @@
 
 @section('content')
 
-@can('is-admin-or-root')
+@can('is-admin-or-root-or-gestor')
 <div class="card card-primary collapsed-card">
     <div class="card-header">
         <h3 class="card-title">
@@ -119,7 +119,7 @@
 
 <div class="card">
 
-    @can('is-admin-or-root')
+    @can('is-admin-or-root-or-gestor')
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
             <div>
@@ -264,7 +264,7 @@
                                class="btn btn-sm btn-secondary mr-1" title="Ver QR">
                                 <i class="fas fa-qrcode"></i>
                             </a>
-                            @can('is-admin-or-root')
+                            @can('is-admin-or-root-or-gestor')
                             <a href="{{ route('certificates.edit', $certificate->id) }}"
                                class="btn btn-sm btn-warning mr-1" title="Editar">
                                 <i class="fas fa-edit"></i>

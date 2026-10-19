@@ -153,6 +153,7 @@ return [
                     'text'  => 'Listado de Áreas',
                     'route' => 'areas.index',
                     'icon'  => 'fas fa-fw fa-list',
+                    
                 ],
                 [
                     'text'  => 'Subáreas',
@@ -160,6 +161,13 @@ return [
                     'icon'  => 'fas fa-fw fa-layer-group',
                 ],
             ],
+        ],
+        // Menú para Gestor (sin submenú, directo a "Mi Subárea")
+        [
+            'text'  => 'Mi Subárea',
+            'route' => 'subareas.index',
+            'icon'  => 'fas fa-fw fa-layer-group',
+            'can'   => 'is-gestor',
         ],
         [
             'text'  => 'Cursos',

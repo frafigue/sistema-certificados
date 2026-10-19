@@ -26,6 +26,7 @@
                         <th>Área</th>
                         <th>Gestor</th>
                         <th>Estado</th>
+                        <th>Plantillas</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -37,7 +38,7 @@
                             <td>{{ $subarea->area->nombre ?? '—' }}</td>
                             <td>{{ $subarea->gestor->name ?? 'Sin asignar' }}</td>
                             <td>
-                                @if ($subarea->estado == 'activa')
+                                @if($subarea->estado == 'activa')
                                     <span class="badge bg-success">Activa</span>
                                 @elseif($subarea->estado == 'sin_gestor')
                                     <span class="badge bg-warning">Sin gestor</span>
@@ -46,26 +47,23 @@
                                 @endif
                             </td>
                             <td>
-                                <a href="{{ route('subareas.show', $subarea->id) }}" class="btn btn-sm btn-info">
-                                    <i class="fas fa-eye"></i> Ver
+                                @if($subarea->template_front && $subarea->template_back)
+                                    <span class="badge bg-success">Configuradas</span>
+                                @else
+                                    <span class="badge bg-warning">Sin plantillas</span>
+                                @endif
+                            </td>
+                            <td>
+                                <a href="{{ route('subareas.show', $subarea->id) }}" class="btn btn-sm btn-info">Ver</a>
+                                <a href="{{ route('subareas.edit', $subarea->id) }}" class="btn btn-sm btn-warning">Editar</a>
+                                <a href="{{ route('subareas.design', $subarea->id) }}" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-paint-brush"></i> Diseñar
                                 </a>
-                                <a href="{{ route('subareas.edit', $subarea->id) }}" class="btn btn-sm btn-warning">
-                                    <i class="fas fa-edit"></i> Editar
-                                </a>
-                                <form action="{{ route('subareas.destroy', $subarea->id) }}" method="POST"
-                                    style="display: inline-block;"
-                                    onsubmit="return confirm('¿Estás seguro de eliminar esta subárea?');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="fas fa-trash"></i> Eliminar
-                                    </button>
-                                </form>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center">No hay subáreas registradas.</td>
+                            <td colspan="7" class="text-center">No hay subáreas registradas.</td>
                         </tr>
                     @endforelse
                 </tbody>

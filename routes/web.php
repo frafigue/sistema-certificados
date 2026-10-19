@@ -133,6 +133,13 @@ Route::middleware('auth')->group(function () {
     // Rutas de subáreas (solo Root y Admin)
     Route::middleware('auth')->group(function () {
         Route::resource('subareas', SubareaController::class);
+        // Rutas de diseño de subáreas
+        Route::get('/subareas/{subarea}/design', [SubareaController::class, 'designTemplate'])->name('subareas.design');
+        Route::post('/subareas/{subarea}/save-template', [SubareaController::class, 'saveTemplate'])->name('subareas.design.save');
+        Route::post('/subareas/{subarea}/upload-background', [SubareaController::class, 'uploadBackground'])->name('subareas.upload.background');
+        Route::get('/subareas/{subarea}/preview', [SubareaController::class, 'previewTemplate'])->name('subareas.preview');
+        Route::post('/subareas/{subarea}/preview-live', [SubareaController::class, 'previewFromDesign'])->name('subareas.preview.live');
+        Route::delete('/subareas/{subarea}/clear-template', [SubareaController::class, 'clearTemplate'])->name('subareas.clear.template');
     });
 
     /*

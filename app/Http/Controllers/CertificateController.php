@@ -435,7 +435,7 @@ HTML;
     {
         $user = Auth::user();
 
-        if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador'])) {
+        if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
             abort(403, 'No tienes permisos para crear certificados.');
         }
 
@@ -443,7 +443,9 @@ HTML;
 
         if ($user->role->name === 'Root') {
             $courses = Course::orderBy('nombre')->get();
-        } elseif ($user->area_id) {
+        } elseif ($user->role->name === 'Gestor' && $user->subarea_id) {
+            $courses = Course::where('subarea_id', $user->subarea_id)->orderBy('nombre')->get();
+        } elseif ($user->role->name === 'Administrador' && $user->area_id) {
             $courses = Course::where('area_id', $user->area_id)->orderBy('nombre')->get();
         } else {
             $courses = Course::orderBy('nombre')->get();
@@ -458,10 +460,10 @@ HTML;
         ini_set('memory_limit', '512M');
 
         try {
-            $user = Auth::user();
-            if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador'])) {
-                abort(403, 'No tienes permisos para crear certificados.');
-            }
+        $user = Auth::user();
+        if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
+            abort(403, 'No tienes permisos para crear certificados.');
+        }
 
             $request->validate([
                 'course_id'        => 'required|exists:courses,id',
@@ -519,21 +521,31 @@ HTML;
                 'qr_path' => storage_path('app/public/' . $qrPath),
             ];
 
-            $area = $course->area;
+            // Determinar qué plantilla usar: subárea (si existe) o área
+            $templateFront = null;
+            $templateBack  = null;
 
-            if (empty($area->template_front)) {
-                return back()->withErrors(['template' => 'Falta plantilla']);
+            if ($course->subarea && !empty($course->subarea->template_front)) {
+                $templateFront = $course->subarea->template_front;
+                $templateBack  = $course->subarea->template_back;
+            } else {
+                $templateFront = $course->area->template_front;
+                $templateBack  = $course->area->template_back;
             }
 
-            $designFront = $this->extractDesignFromTemplate($area->template_front);
+            if (empty($templateFront)) {
+                return back()->withErrors(['template' => 'Falta plantilla (ni de la subárea ni del área)']);
+            }
+
+            $designFront = $this->extractDesignFromTemplate($templateFront);
             $htmlFront   = Blade::render(
-                $designFront ? $this->buildHtmlFromDesign($designFront) : $area->template_front,
+                $designFront ? $this->buildHtmlFromDesign($designFront) : $templateFront,
                 $data
             );
 
             $htmlBack = null;
-            if (!empty($area->template_back)) {
-                $designBack = $this->extractDesignFromTemplate($area->template_back);
+            if (!empty($templateBack)) {
+                $designBack = $this->extractDesignFromTemplate($templateBack);
                 if ($designBack && (!empty($designBack['elements']) || !empty($designBack['background']))) {
                     $htmlBack = Blade::render($this->buildHtmlFromDesign($designBack), $data);
                 }
@@ -555,6 +567,7 @@ HTML;
             $certificate = Certificate::create([
                 'course_id'                => $course->id,
                 'person_id'                => $person->id,
+                'subarea_id'               => $course->subarea_id,  // ← AGREGAR
                 'condition'                => $request->condition,
                 'nota'                     => $request->nota,
                 'unidad_academica'         => $unidadAcademica,
@@ -633,11 +646,23 @@ HTML;
     {
         $user = Auth::user();
 
-        if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador'])) {
-            abort(403, 'No tienes permisos para editar certificados.');
+        if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
+            abort(403, 'No tienes permisos para actualizar certificados.');
         }
 
-        if ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
+        if ($user->role->name === 'Gestor' && $user->subarea_id) {
+            if ($certificate->course->subarea_id != $user->subarea_id) {
+                abort(403, 'No tienes permisos para actualizar este certificado.');
+            }
+        } elseif ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
+            abort(403, 'No tienes permisos para actualizar este certificado.');
+        }
+
+        if ($user->role->name === 'Gestor' && $user->subarea_id) {
+            if ($certificate->course->subarea_id != $user->subarea_id) {
+                abort(403, 'No tienes permisos para editar este certificado.');
+            }
+        } elseif ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
             abort(403, 'No tienes permisos para editar este certificado.');
         }
 
@@ -645,6 +670,8 @@ HTML;
 
         if ($user->role->name === 'Root') {
             $courses = Course::orderBy('nombre')->get();
+        } elseif ($user->role->name === 'Gestor' && $user->subarea_id) {
+            $courses = Course::where('subarea_id', $user->subarea_id)->orderBy('nombre')->get();
         } elseif ($user->area_id) {
             $courses = Course::where('area_id', $user->area_id)->orderBy('nombre')->get();
         } else {
@@ -724,8 +751,16 @@ HTML;
     {
         $user = Auth::user();
 
-        if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador'])) {
+        if (!$user->role || !in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
             abort(403, 'No tienes permisos para eliminar certificados.');
+        }
+
+        if ($user->role->name === 'Gestor' && $user->subarea_id) {
+            if ($certificate->course->subarea_id != $user->subarea_id) {
+                abort(403, 'No tienes permisos para eliminar este certificado.');
+            }
+        } elseif ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
+            abort(403, 'No tienes permisos para eliminar este certificado.');
         }
 
         if ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
@@ -804,9 +839,17 @@ HTML;
                 'qr_path'         => storage_path('app/public/' . $qrPath),
             ];
 
-            $area          = $course->area;
-            $templateFront = $area->template_front ?? null;
-            $templateBack  = $area->template_back  ?? null;
+            // Determinar qué plantilla usar: subárea (si existe) o área
+            $templateFront = null;
+            $templateBack  = null;
+
+            if ($course->subarea && !empty($course->subarea->template_front)) {
+                $templateFront = $course->subarea->template_front;
+                $templateBack  = $course->subarea->template_back;
+            } else {
+                $templateFront = $course->area->template_front;
+                $templateBack  = $course->area->template_back;
+            }
 
             if ($templateFront) {
                 $designFront = $this->extractDesignFromTemplate($templateFront);
