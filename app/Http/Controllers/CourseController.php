@@ -123,6 +123,7 @@ class CourseController extends Controller
 
         DB::beginTransaction();
         try {
+           
             $course = Course::create([
                 'area_id'       => $data['area_id'],
                 'subarea_id'    => $user->subarea_id ?? null,  // ← NUEVO

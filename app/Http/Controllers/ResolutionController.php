@@ -21,8 +21,16 @@ class ResolutionController extends Controller
         $user  = Auth::user();
         $query = Resolution::query();
 
+        // Root ve todas
+        // Admin ve su área
+        // Gestor ve su subárea (a través de la relación con el área)
         if ($user->role?->name === 'Administrador' && $user->area_id) {
             $query->where('area_id', $user->area_id);
+        } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            if ($subarea) {
+                $query->where('area_id', $subarea->area_id);
+            }
         }
 
         // ✅ Filtros de búsqueda
@@ -39,21 +47,17 @@ class ResolutionController extends Controller
 
     public function create()
     {
-        // Obtener el usuario logueado
         $user = Auth::user();
 
-        // Si el usuario es 'root', mostrar todas las áreas
         if ($user->role?->name === 'Root') {
             $areas = Area::all();
-        } 
-        // Si es un 'Administrador' con un área asignada, mostrar solo su área
-        else if ($user->role?->name === 'Administrador' && $user->area_id) {
+        } elseif ($user->role?->name === 'Administrador' && $user->area_id) {
             $areas = Area::where('id', $user->area_id)->get();
-        } 
-        // Para cualquier otro caso (opcional, para prevenir errores), 
-        // se puede devolver una colección vacía.
-        else {
-            $areas = collect(); 
+        } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            $areas   = Area::where('id', $subarea->area_id)->get();
+        } else {
+            $areas = collect();
         }
 
         return view('resolutions.create', compact('areas'));
@@ -61,6 +65,7 @@ class ResolutionController extends Controller
 
     public function store(Request $request)
     {
+        $user = Auth::user();  // ← AGREGAR ESTA LÍNEA
         // Validar los datos recibidos
         $data = $request->validate([
             'numero' => [
@@ -76,6 +81,17 @@ class ResolutionController extends Controller
             'area_id' => 'required|exists:areas,id',
             'pdf_file' => 'required|file|mimes:pdf',
         ]);
+
+        // Validación para Gestor
+        if ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            if ($data['area_id'] != $subarea->area_id) {
+                return redirect()->back()
+                    ->withErrors(['area_id' => 'No tienes permisos para crear resoluciones en esta área.'])
+                    ->withInput();
+            }
+        }
+
         $filePath = $request->file('pdf_file')->store('resolutions', 'public');
         $area = Area::findOrFail($request->area_id);
         Resolution::create([
@@ -94,13 +110,21 @@ class ResolutionController extends Controller
     {
         $user = Auth::user();
 
-        // Si el usuario es 'Root', puede editar todas las áreas
+        // Validación para Gestor (solo puede editar resoluciones de su área)
+        if ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            if ($resolution->area_id != $subarea->area_id) {
+                abort(403, 'No tienes permisos para editar esta resolución.');
+            }
+        }
+
         if ($user->role?->name === 'Root') {
             $areas = Area::all();
-        } 
-        // Si el usuario es un 'Administrador', solo puede editar su área
-        else if ($user->role?->name === 'Administrador' && $user->area_id) {
+        } elseif ($user->role?->name === 'Administrador' && $user->area_id) {
             $areas = Area::where('id', $user->area_id)->get();
+        } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            $areas   = Area::where('id', $subarea->area_id)->get();
         } else {
             $areas = collect();
         }
@@ -110,6 +134,16 @@ class ResolutionController extends Controller
 
     public function update(Request $request, Resolution $resolution)
     {
+        $user = Auth::user();  // ← CAPTURAR
+
+        // Validación para Gestor
+        if ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            if ($resolution->area_id != $subarea->area_id) {
+                abort(403, 'No tienes permisos para actualizar esta resolución.');
+            }
+        }
+
         $data = $request->validate([
             'numero' => [
                 'required',
@@ -137,6 +171,16 @@ class ResolutionController extends Controller
 
     public function destroy(Resolution $resolution)
     {
+        $user = Auth::user();
+
+        // Validación para Gestor
+        if ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $subarea = $user->subarea;
+            if ($resolution->area_id != $subarea->area_id) {
+                abort(403, 'No tienes permisos para eliminar esta resolución.');
+            }
+        }
+
         if ($resolution->pdf_path) {
             Storage::disk('public')->delete($resolution->pdf_path);
         }

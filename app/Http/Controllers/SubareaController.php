@@ -21,10 +21,14 @@ class SubareaController extends Controller
             // Root: ve todas
             $subareas = Subarea::with(['area', 'gestor'])->get();
         } elseif ($user->role_id == 2) {
-            // Admin: ve las de sus áreas
-            $subareas = Subarea::whereHas('area', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })->with(['area', 'gestor'])->get();
+            // Admin: ve las subáreas de su área
+            if ($user->area_id) {
+                $subareas = Subarea::where('area_id', $user->area_id)
+                    ->with(['area', 'gestor'])
+                    ->get();
+            } else {
+                $subareas = collect(); // Sin área asignada
+            }
         } else {
             // Otros: solo su subárea
             $subareas = Subarea::where('id', $user->subarea_id)->with(['area', 'gestor'])->get();

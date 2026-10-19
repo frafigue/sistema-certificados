@@ -142,7 +142,7 @@ return [
             'text'  => 'Resoluciones',
             'route' => 'resolutions.index',
             'icon'  => 'fas fa-fw fa-file-alt',
-            'can'   => 'is-admin-or-root',
+            'can'   => 'is-admin-or-root-or-gestor',
         ],
         [
             'text'    => 'Áreas',
@@ -165,7 +165,7 @@ return [
             'text'  => 'Cursos',
             'route' => 'courses.index',
             'icon'  => 'fas fa-fw fa-graduation-cap',
-            'can'   => 'is-admin-or-root',
+            'can'   => 'is-admin-or-root-or-gestor',
         ],
         [
             'text'  => 'Personas',
@@ -177,7 +177,7 @@ return [
             'text'  => 'Certificados',
             'route' => 'certificates.index',
             'icon'  => 'fas fa-fw fa-certificate',
-            'can'   => 'is-admin-or-root',
+            'can'   => 'is-admin-or-root-or-gestor',
         ],
 
         // ── MI CUENTA ────────────────────────────────────────────────────────
