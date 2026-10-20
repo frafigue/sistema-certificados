@@ -79,7 +79,44 @@
                 </button>
             </div>
         </div>
+        
+        {{-- ── TAMAÑO DE PAPEL ───────────────────────────────────────────────── --}}
+        <div class="card card-outline card-info mb-2">
+            <div class="card-header p-2">
+                <h6 class="mb-0 small"><i class="fas fa-file-alt"></i> Tamaño de papel (PDF)</h6>
+            </div>
+            <div class="card-body p-2">
+                <label class="small mb-1">Tamaño</label>
+                <select id="paperSize" class="form-control form-control-sm mb-2">
+                    <option value="A4">A4 (210 × 297 mm)</option>
+                    <option value="A5">A5 (148 × 210 mm)</option>
+                    <option value="Oficio">Oficio (216 × 356 mm)</option>
+                    <option value="Carta">Carta (216 × 279 mm)</option>
+                    <option value="custom">Personalizado</option>
+                </select>
 
+                <label class="small mb-1">Orientación</label>
+                <select id="paperOrientation" class="form-control form-control-sm mb-2">
+                    <option value="landscape">Horizontal</option>
+                    <option value="portrait">Vertical</option>
+                </select>
+
+                <div id="customSizeFields" style="display:none;">
+                    <label class="small mb-1">Ancho (cm)</label>
+                    <input type="number" id="paperWidthCm" class="form-control form-control-sm mb-2"
+                           step="0.1" min="1" max="200" placeholder="Ej: 21.0">
+
+                    <label class="small mb-1">Alto (cm)</label>
+                    <input type="number" id="paperHeightCm" class="form-control form-control-sm mb-2"
+                           step="0.1" min="1" max="200" placeholder="Ej: 29.7">
+                </div>
+
+                <small class="text-muted d-block" style="font-size:10px;">
+                    <i class="fas fa-info-circle"></i> El canvas de edición se mantiene en A4.
+                    Este tamaño se aplica al <strong>PDF final</strong>.
+                </small>
+            </div>
+        </div>
         <div class="card card-outline card-primary mb-2">
             <div class="card-header p-2">
                 <h6 class="mb-0 small"><i class="fas fa-th-large"></i> Elementos</h6>
@@ -279,6 +316,11 @@
     @csrf
     <input type="hidden" name="design_front" id="inputDesignFront">
     <input type="hidden" name="design_back"  id="inputDesignBack">
+    +    {{-- Tamaño de papel (se llenan con JS antes del submit) --}}
+    <input type="hidden" name="paper_size"  id="inputPaperSize">
+    <input type="hidden" name="orientation" id="inputPaperOrientation">
+    <input type="hidden" name="width_cm"    id="inputPaperWidthCm">
+    <input type="hidden" name="height_cm"   id="inputPaperHeightCm">
 </form>
 
 <form id="previewForm" action="{{ route('subareas.preview.live', $subarea->id) }}" method="POST" target="_blank" style="display:none;">
