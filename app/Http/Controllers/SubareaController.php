@@ -175,6 +175,11 @@ class SubareaController extends Controller
         $request->validate([
             'design_front' => 'required|string',
             'design_back'  => 'nullable|string',
+            // Tamaño de papel (nuevos, opcionales)
+            'paper_size'   => 'nullable|in:A4,A5,Oficio,Carta,custom',
+            'orientation'  => 'nullable|in:portrait,landscape',
+            'width_cm'     => 'nullable|numeric|min:1|max:200',
+            'height_cm'    => 'nullable|numeric|min:1|max:200',
         ]);
 
         $designFront = json_decode($request->design_front, true);
@@ -195,8 +200,13 @@ class SubareaController extends Controller
         $templateBack  = $service->buildHtmlFromDesign($designBack);
 
         $subarea->update([
-            'template_front' => $templateFront,
-            'template_back'  => $templateBack,
+            'template_front'       => $templateFront,
+            'template_back'        => $templateBack,
+            // Tamaño de papel (nuevos)
+            'template_paper_size'  => $request->paper_size  ?? $subarea->template_paper_size  ?? 'A4',
+            'template_orientation' => $request->orientation ?? $subarea->template_orientation ?? 'landscape',
+            'template_width_cm'    => $request->width_cm    ?? $subarea->template_width_cm,
+            'template_height_cm'   => $request->height_cm   ?? $subarea->template_height_cm,
         ]);
 
         return redirect()->route('subareas.design', $subarea)

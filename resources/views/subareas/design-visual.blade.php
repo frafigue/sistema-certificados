@@ -1044,7 +1044,11 @@ function saveDesign() {
 
     $('#inputDesignFront').val(JSON.stringify(designs.front));
     $('#inputDesignBack').val(JSON.stringify(designs.back));
-
+        // Enviar tamaño de papel al form
+    $('#inputPaperSize').val($('#paperSize').val());
+    $('#inputPaperOrientation').val($('#paperOrientation').val());
+    $('#inputPaperWidthCm').val($('#paperWidthCm').val());
+    $('#inputPaperHeightCm').val($('#paperHeightCm').val());
     Swal.fire({
         title: '¿Guardar plantillas?',
         html:  'Se guardarán el frente y el dorso del certificado para la subárea <strong>{{ $subarea->nombre }}</strong>.',
