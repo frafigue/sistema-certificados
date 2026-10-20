@@ -174,6 +174,11 @@ class AreaController extends Controller
         $request->validate([
             'design_front' => 'required|string',
             'design_back'  => 'nullable|string', // ← dorso opcional
+            // Tamaño de papel (nuevos, opcionales)
+            'paper_size'   => 'nullable|in:A4,A5,Oficio,Carta,custom',
+            'orientation'  => 'nullable|in:portrait,landscape',
+            'width_cm'     => 'nullable|numeric|min:1|max:200',
+            'height_cm'    => 'nullable|numeric|min:1|max:200',
         ]);
 
         $designFront = json_decode($request->design_front, true);
@@ -196,8 +201,13 @@ class AreaController extends Controller
         $templateBack  = $service->buildHtmlFromDesign($designBack);
 
         $area->update([
-            'template_front' => $templateFront,
-            'template_back'  => $templateBack,
+            'template_front'       => $templateFront,
+            'template_back'        => $templateBack,
+            // Tamaño de papel (nuevos)
+            'template_paper_size'  => $request->paper_size  ?? $area->template_paper_size  ?? 'A4',
+            'template_orientation' => $request->orientation ?? $area->template_orientation ?? 'landscape',
+            'template_width_cm'    => $request->width_cm    ?? $area->template_width_cm,
+            'template_height_cm'   => $request->height_cm   ?? $area->template_height_cm,
         ]);
 
         return redirect()->route('areas.design', $area)
