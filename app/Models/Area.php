@@ -7,7 +7,16 @@ use App\Models\Course;
 
 class Area extends Model
 {
-    protected $fillable = ['nombre', 'descripcion', 'template_front', 'template_back'];
+    protected $fillable = [
+        'nombre',
+        'descripcion',
+        'template_front',
+        'template_back',
+        'template_paper_size',
+        'template_orientation',
+        'template_width_cm',
+        'template_height_cm',
+    ];
 
     public function courses()
     {

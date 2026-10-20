@@ -79,4 +79,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(Subarea::class, 'created_by');
     }
+    /**
+     * Plantillas creadas por este usuario
+     */
+    public function templates()
+    {
+        return $this->hasMany(CertificateTemplate::class, 'created_by');
+    }
 }

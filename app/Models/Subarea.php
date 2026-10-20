@@ -13,8 +13,12 @@ class Subarea extends Model
         'area_id',
         'nombre',
         'descripcion',
-        'template_front',   // ← AGREGAR
-        'template_back',    // ← AGREGAR
+        'template_front',
+        'template_back',
+        'template_paper_size',
+        'template_orientation',
+        'template_width_cm',
+        'template_height_cm',
         'gestor_id',
         'estado',
         'created_by',
