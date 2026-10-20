@@ -396,6 +396,21 @@ var designs = {
     front: INITIAL_FRONT || { background: '', elements: [] },
     back:  INITIAL_BACK  || { background: '', elements: [] },
 };
+    // ══════════════════════════════════════════════════════════════════════════
+    // Inicializar selector de tamaño de papel con valores de la BD
+    // ══════════════════════════════════════════════════════════════════════════
+    document.getElementById('paperSize').value        = "{{ $subarea->template_paper_size ?? 'A4' }}";
+    document.getElementById('paperOrientation').value = "{{ $subarea->template_orientation ?? 'landscape' }}";
+    document.getElementById('paperWidthCm').value     = "{{ $subarea->template_width_cm ?? '' }}";
+    document.getElementById('paperHeightCm').value    = "{{ $subarea->template_height_cm ?? '' }}";
+
+    // Listener: mostrar/ocultar campos de "Personalizado"
+    function toggleCustomSizeFields() {
+        var isCustom = document.getElementById('paperSize').value === 'custom';
+        document.getElementById('customSizeFields').style.display = isCustom ? 'block' : 'none';
+    }
+    document.getElementById('paperSize').addEventListener('change', toggleCustomSizeFields);
+    toggleCustomSizeFields(); // Ejecutar al cargar (por si la subárea ya era "custom")
 var selectedEl = null;
 var elCounter  = 0;
 
