@@ -16,6 +16,7 @@ use App\Http\Controllers\UnifiedImportController;
 use App\Http\Controllers\CertificateExcelGeneratorController;
 use App\Http\Controllers\ImportHistoryController;
 use App\Http\Controllers\SubareaController;
+use App\Http\Controllers\TemplateController;
 
 /*
 |--------------------------------------------------------------------------
@@ -141,6 +142,27 @@ Route::middleware('auth')->group(function () {
         Route::post('/subareas/{subarea}/preview-live', [SubareaController::class, 'previewFromDesign'])->name('subareas.preview.live');
         Route::delete('/subareas/{subarea}/clear-template', [SubareaController::class, 'clearTemplate'])->name('subareas.clear.template');
     });
+
+        /*
+    |--------------------------------------------------------------------------
+    | REPOSITORIO DE PLANTILLAS (por usuario)
+    |--------------------------------------------------------------------------
+    */
+
+    // Rutas específicas primero (para que no choquen con {template} del resource)
+    Route::get('templates-mine', [TemplateController::class, 'listMine'])->name('templates.mine');
+    Route::post('templates/quick-save', [TemplateController::class, 'quickSave'])->name('templates.quick-save');
+    Route::get('templates/{id}/json', [TemplateController::class, 'getJson'])->name('templates.json');
+
+    // Diseño de plantillas (antes del resource para que no choque con {template})
+    Route::get('/templates/{template}/design', [TemplateController::class, 'designTemplate'])->name('templates.design');
+    Route::post('/templates/{template}/save-template', [TemplateController::class, 'saveTemplate'])->name('templates.design.save');
+    Route::post('/templates/{template}/upload-background', [TemplateController::class, 'uploadBackground'])->name('templates.upload.background');
+    Route::get('/templates/{template}/preview', [TemplateController::class, 'previewTemplate'])->name('templates.preview');
+    Route::delete('/templates/{template}/clear-template', [TemplateController::class, 'clearTemplate'])->name('templates.clear.template');
+
+    // CRUD estándar
+    Route::resource('templates', TemplateController::class);
 
     /*
     |--------------------------------------------------------------------------

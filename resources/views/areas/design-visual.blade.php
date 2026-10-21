@@ -119,6 +119,25 @@
             </div>
         </div>
 
+        
+        {{-- ── BIBLIOTECA DE PLANTILLAS ────────────────────────────────────── --}}
+        <div class="card card-outline card-success mb-2">
+            <div class="card-header p-2">
+                <h6 class="mb-0 small"><i class="fas fa-folder-open"></i> Mi biblioteca</h6>
+            </div>
+            <div class="card-body p-2">
+                <button type="button" class="btn btn-xs btn-success btn-block mb-1" onclick="openSaveToLibraryModal()">
+                    <i class="fas fa-save"></i> Guardar en mi biblioteca
+                </button>
+                <button type="button" class="btn btn-xs btn-outline-success btn-block mb-1" onclick="openUseFromLibraryModal()">
+                    <i class="fas fa-folder-open"></i> Usar plantilla de mi biblioteca
+                </button>
+                <small class="text-muted d-block" style="font-size:10px;">
+                    <i class="fas fa-info-circle"></i> Las plantillas son <strong>solo tuyas</strong>.
+                </small>
+            </div>
+        </div>
+
         <div class="card card-outline card-primary mb-2">
             <div class="card-header p-2">
                 <h6 class="mb-0 small"><i class="fas fa-th-large"></i> Elementos</h6>
@@ -1138,5 +1157,265 @@ window.addEventListener('beforeunload', function (e) {
         return e.returnValue;
     }
 });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // BIBLIOTECA DE PLANTILLAS (áreas)
+    // ══════════════════════════════════════════════════════════════════════
+
+    function openSaveToLibraryModal() {
+        document.getElementById('libNombre').value = '';
+        document.getElementById('libDescripcion').value = '';
+        document.getElementById('libError').classList.add('d-none');
+        $('#saveToLibraryModal').modal('show');
+    }
+
+    function confirmSaveToLibrary() {
+        var nombre = document.getElementById('libNombre').value.trim();
+        if (!nombre) {
+            var err = document.getElementById('libError');
+            err.textContent = 'El nombre es obligatorio.';
+            err.classList.remove('d-none');
+            return;
+        }
+
+        saveCurrentToState();
+
+        var payload = {
+            nombre:       nombre,
+            descripcion:  document.getElementById('libDescripcion').value.trim(),
+            paper_size:   document.getElementById('paperSize').value,
+            orientation:  document.getElementById('paperOrientation').value,
+            width_cm:     document.getElementById('paperWidthCm').value || null,
+            height_cm:    document.getElementById('paperHeightCm').value || null,
+            components:   JSON.stringify(designs),
+            _token:       '{{ csrf_token() }}'
+        };
+
+        var $btn = $('#saveToLibraryModal .btn-success');
+        $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Guardando...');
+
+        $.post('{{ route("templates.quick-save") }}', payload)
+            .done(function (resp) {
+                $('#saveToLibraryModal').modal('hide');
+                Swal.fire({
+                    title: '¡Guardado!',
+                    text: 'La plantilla "' + nombre + '" se guardó en tu biblioteca.',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false,
+                });
+            })
+            .fail(function (xhr) {
+                var err = document.getElementById('libError');
+                err.textContent = (xhr.responseJSON && xhr.responseJSON.message) || 'Error al guardar.';
+                err.classList.remove('d-none');
+            })
+            .always(function () {
+                $btn.prop('disabled', false).html('<i class="fas fa-save"></i> Guardar');
+            });
+    }
+
+    function openUseFromLibraryModal() {
+        var container = document.getElementById('libListContainer');
+        container.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="text-muted mt-2">Cargando plantillas...</p></div>';
+        $('#useFromLibraryModal').modal('show');
+
+        $.get('{{ route("templates.mine") }}')
+            .done(function (templates) {
+                if (!templates.length) {
+                    container.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-3x mb-2"></i><p>No tenés plantillas guardadas todavía.</p></div>';
+                    return;
+                }
+
+                var html = '<div class="row">';
+                templates.forEach(function (tpl) {
+                    var img = tpl.background_image
+                        ? '<img src="/storage/' + tpl.background_image + '" style="width:100%;height:120px;object-fit:cover;border-radius:4px;">'
+                        : '<div style="width:100%;height:120px;background:#f0f0f0;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;"><i class="fas fa-image fa-3x"></i></div>';
+
+                    html += '<div class="col-md-4 mb-3">'
+                         +  '<div class="card h-100">'
+                         +  '<div class="card-body p-2">'
+                         +  img
+                         +  '<h6 class="mt-2 mb-1 small"><strong>' + tpl.nombre + '</strong></h6>'
+                         +  '<small class="text-muted d-block">' + tpl.paper_size + ' · ' + (tpl.orientation === 'landscape' ? 'Horizontal' : 'Vertical') + '</small>'
+                         +  '</div>'
+                         +  '<div class="card-footer p-1 text-center">'
+                         +  '<button type="button" class="btn btn-xs btn-primary mr-1" onclick="applyLibraryTemplate(' + tpl.id + ')">'
+                         +  '<i class="fas fa-check"></i> Usar'
+                         +  '</button>'
+                         +  '<button type="button" class="btn btn-xs btn-danger" onclick="deleteLibraryTemplate(' + tpl.id + ', \'' + tpl.nombre.replace(/'/g, "\\'") + '\')" title="Eliminar">'
+                         +  '<i class="fas fa-trash"></i>'
+                         +  '</button>'
+                         +  '</div>'
+                         +  '</div>'
+                         +  '</div>';
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            })
+            .fail(function () {
+                container.innerHTML = '<div class="alert alert-danger">Error al cargar las plantillas.</div>';
+            });
+    }
+
+    function applyLibraryTemplate(templateId) {
+        if (designModified) {
+            Swal.fire({
+                title: '¿Reemplazar el diseño actual?',
+                text:  'Tenés cambios sin guardar. Si usás esta plantilla, los perdés.',
+                icon:  'warning',
+                showCancelButton:   true,
+                confirmButtonText:  'Sí, reemplazar',
+                cancelButtonText:   'Cancelar',
+                confirmButtonColor: '#dc3545',
+            }).then(function (r) {
+                if (r.isConfirmed) doApplyLibraryTemplate(templateId);
+            });
+        } else {
+            doApplyLibraryTemplate(templateId);
+        }
+    }
+
+    function doApplyLibraryTemplate(templateId) {
+        $.get('/templates/' + templateId + '/json')
+            .done(function (tpl) {
+                if (tpl.components) {
+                    try {
+                        var parsed = JSON.parse(tpl.components);
+                        if (parsed.front || parsed.back) {
+                            designs.front = parsed.front || { background: '', elements: [] };
+                            designs.back  = parsed.back  || { background: '', elements: [] };
+                        } else {
+                            designs.front = parsed;
+                            designs.back  = { background: '', elements: [] };
+                        }
+                    } catch (e) {
+                        Swal.fire('Error', 'La plantilla no tiene un formato válido.', 'error');
+                        return;
+                    }
+                }
+
+                if (tpl.paper_size) {
+                    document.getElementById('paperSize').value = tpl.paper_size;
+                }
+                if (tpl.orientation) {
+                    document.getElementById('paperOrientation').value = tpl.orientation;
+                }
+                toggleCustomSizeFields();
+
+                designModified = false;
+                renderCanvas();
+                $('#useFromLibraryModal').modal('hide');
+
+                Swal.fire({
+                    title: 'Plantilla cargada',
+                    text:  '"' + tpl.nombre + '" se aplicó al canvas. Guardá el diseño para conservarlo.',
+                    icon:  'success',
+                    timer: 3000,
+                    showConfirmButton: false,
+                });
+            })
+            .fail(function () {
+                Swal.fire('Error', 'No se pudo cargar la plantilla.', 'error');
+            });
+    }
+
+    function deleteLibraryTemplate(templateId, templateName) {
+        Swal.fire({
+            title: '¿Eliminar plantilla?',
+            html:  'La plantilla <strong>"' + templateName + '"</strong> se va a borrar de tu biblioteca.<br><br>Esta acción no se puede deshacer.',
+            icon:  'warning',
+            showCancelButton:   true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor:  '#6c757d',
+            confirmButtonText:  '<i class="fas fa-trash"></i> Sí, eliminar',
+            cancelButtonText:   'Cancelar',
+            reverseButtons:     true,
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+
+            $.ajax({
+                url: '/templates/' + templateId,
+                method: 'POST',
+                data: {
+                    _method: 'DELETE',
+                    _token: '{{ csrf_token() }}'
+                }
+            })
+            .done(function () {
+                $('#useFromLibraryModal').modal('hide');
+                Swal.fire({
+                    title: 'Eliminada',
+                    text:  'La plantilla "' + templateName + '" se eliminó de tu biblioteca.',
+                    icon:  'success',
+                    timer: 2000,
+                    showConfirmButton: false,
+                });
+            })
+            .fail(function (xhr) {
+                Swal.fire(
+                    'Error',
+                    (xhr.responseJSON && xhr.responseJSON.message) || 'No se pudo eliminar la plantilla.',
+                    'error'
+                );
+            });
+        });
+    }
 </script>
+
+{{-- ═══════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL: Guardar en biblioteca                                            --}}
+{{-- ═══════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="saveToLibraryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-save"></i> Guardar en mi biblioteca
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nombre <span class="text-danger">*</span></label>
+                    <input type="text" id="libNombre" class="form-control" maxlength="255" placeholder="Ej: Certificado A4 azul">
+                </div>
+                <div class="form-group">
+                    <label>Descripción (opcional)</label>
+                    <textarea id="libDescripcion" class="form-control" rows="2" placeholder="Ej: Diseño para cursos de programación"></textarea>
+                </div>
+                <div id="libError" class="alert alert-danger d-none mb-0"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="confirmSaveToLibrary()">
+                    <i class="fas fa-save"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ═══════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL: Usar plantilla de biblioteca                                     --}}
+{{-- ═══════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="useFromLibraryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-folder-open"></i> Mi biblioteca de plantillas
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body" id="libListContainer">
+                <div class="text-center py-3">
+                    <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                    <p class="text-muted mt-2">Cargando plantillas...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @stop

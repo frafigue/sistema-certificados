@@ -322,4 +322,85 @@ class TemplateController extends Controller
 
         return $design;
     }
+    
+    // =========================================================================
+    // MÉTODOS PARA INTEGRACIÓN CON EL EDITOR (modal "Usar plantilla")
+    // =========================================================================
+
+    /**
+     * Devuelve las plantillas del usuario en JSON (para el modal del editor).
+     * Solo las del usuario logueado (o todas si es Root).
+     */
+    public function listMine()
+    {
+        $user = Auth::user();
+
+        $query = CertificateTemplate::orderBy('created_at', 'desc');
+
+        if (!$user->can('is-root')) {
+            $query->where('created_by', $user->id);
+        }
+
+        $templates = $query->get([
+            'id',
+            'nombre',
+            'descripcion',
+            'paper_size',
+            'orientation',
+            'background_image',
+        ]);
+
+        return response()->json($templates);
+    }
+
+    /**
+     * Devuelve una plantilla completa en JSON (para clonar en el editor).
+     */
+    public function getJson(string $id)
+    {
+        $template = CertificateTemplate::findOrFail($id);
+        $this->authorizeAccess($template);
+
+        return response()->json($template);
+    }
+    
+    /**
+     * Guarda una plantilla desde el editor (AJAX).
+     * Toma el JSON de `designs` del editor, lo decodifica y lo guarda.
+     */
+    public function quickSave(Request $request)
+    {
+        $request->validate([
+            'nombre'      => 'required|string|max:255',
+            'descripcion' => 'nullable|string',
+            'paper_size'  => 'required|in:A4,A5,Oficio,Carta,custom',
+            'orientation' => 'required|in:portrait,landscape',
+            'width_cm'    => 'nullable|numeric|min:1|max:200',
+            'height_cm'   => 'nullable|numeric|min:1|max:200',
+            'components'  => 'required|string',
+        ]);
+
+        $decoded = json_decode($request->components, true);
+        if (!$decoded || !isset($decoded['front'])) {
+            return response()->json(['message' => 'El diseño no es válido.'], 422);
+        }
+
+        $template = CertificateTemplate::create([
+            'nombre'          => $request->nombre,
+            'descripcion'     => $request->descripcion,
+            'paper_size'      => $request->paper_size,
+            'orientation'     => $request->orientation,
+            'width_cm'        => $request->paper_size === 'custom' ? $request->width_cm : null,
+            'height_cm'       => $request->paper_size === 'custom' ? $request->height_cm : null,
+            'background_image'=> null,
+            'components'      => $request->components,  // ← GUARDAR EL JSON COMPLETO
+            'is_public'       => false,
+            'created_by'      => Auth::id(),
+        ]);
+
+        return response()->json([
+            'id'     => $template->id,
+            'nombre' => $template->nombre,
+        ]);
+    }
 }
