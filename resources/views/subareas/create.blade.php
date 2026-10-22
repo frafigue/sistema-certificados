@@ -7,10 +7,10 @@
 @stop
 
 @section('content')
-    @if($errors->any())
+    @if ($errors->any())
         <div class="alert alert-danger">
             <ul class="mb-0">
-                @foreach($errors->all() as $error)
+                @foreach ($errors->all() as $error)
                     <li>{{ $error }}</li>
                 @endforeach
             </ul>
@@ -25,7 +25,7 @@
                     <label for="area_id">Área</label>
                     <select name="area_id" id="area_id" class="form-control" required>
                         <option value="">— Seleccionar área —</option>
-                        @foreach($areas as $area)
+                        @foreach ($areas as $area)
                             <option value="{{ $area->id }}">{{ $area->nombre }}</option>
                         @endforeach
                     </select>
@@ -39,6 +39,18 @@
                 <div class="form-group">
                     <label for="descripcion">Descripción (opcional)</label>
                     <textarea name="descripcion" id="descripcion" class="form-control" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="gestor_id">Gestor (opcional)</label>
+                    <select name="gestor_id" id="gestor_id" class="form-control">
+                        <option value="">— Sin gestor —</option>
+                        @foreach ($gestores ?? [] as $gestor)
+                            <option value="{{ $gestor->id }}">{{ $gestor->name }} ({{ $gestor->email }})</option>
+                        @endforeach
+                    </select>
+                    <small class="text-muted">Podés asignar un gestor existente. Para crear uno nuevo, andá a "Gestión de
+                        Usuarios".</small>
                 </div>
 
                 <button type="submit" class="btn btn-primary">

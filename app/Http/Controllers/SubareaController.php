@@ -43,34 +43,53 @@ class SubareaController extends Controller
     {
         $user = Auth::user();
 
+        $gestorRoleId = \App\Models\Role::where('name', 'Gestor')->first()->id ?? 4;
+
         if ($user->role_id == 1) {
             $areas = Area::all();
+            $gestores = User::where('role_id', $gestorRoleId)->get();
         } else {
             $areas = Area::where('id', $user->area_id)->get();
+            $gestores = User::where('role_id', $gestorRoleId)
+                ->where(function ($q) use ($user) {
+                    $q->whereNull('subarea_id')
+                        ->orWhere('area_id', $user->area_id);
+                })
+                ->get();
         }
 
-        return view('subareas.create', compact('areas'));
+        return view('subareas.create', compact('areas', 'gestores'));
     }
 
     public function store(Request $request)
     {
+        $user = Auth::user();
+
         $request->validate([
             'area_id' => 'required|exists:areas,id',
             'nombre' => 'required|string|max:255',
             'descripcion' => 'nullable|string',
+            'gestor_id' => 'nullable|exists:users,id',
         ]);
 
-        Subarea::create([
+        // Admin solo puede crear subáreas en su área
+        if ($user->role_id == 2 && $request->area_id != $user->area_id) {
+            abort(403, 'No tienes permisos para crear subáreas en esta área.');
+        }
+
+        $data = [
             'area_id' => $request->area_id,
             'nombre' => $request->nombre,
             'descripcion' => $request->descripcion,
-            'gestor_id' => null,
-            'estado' => 'sin_gestor',
+            'gestor_id' => $request->gestor_id ?: null,
+            'estado' => $request->gestor_id ? 'activa' : 'sin_gestor',
             'created_by' => Auth::id(),
-        ]);
+        ];
+
+        Subarea::create($data);
 
         return redirect()->route('subareas.index')
-            ->with('success', 'Subárea creada. Contactá al Root para asignar un gestor.');
+            ->with('success', 'Subárea creada exitosamente.');
     }
 
     public function show(string $id)
@@ -81,26 +100,66 @@ class SubareaController extends Controller
 
     public function edit(string $id)
     {
+        $user = Auth::user();
         $subarea = Subarea::findOrFail($id);
-        $areas = Area::all();
 
-        return view('subareas.edit', compact('subarea', 'areas'));
+        // Admin solo puede editar subáreas de su área
+        if ($user->role_id == 2 && $subarea->area_id !== $user->area_id) {
+            abort(403, 'No tienes permisos para editar esta subárea.');
+        }
+
+        // Admin solo ve su área en el select
+        if ($user->role_id == 1) {
+            $areas = Area::all();
+        } else {
+            $areas = Area::where('id', $user->area_id)->get();
+        }
+
+        // Gestores disponibles (solo del área de la subárea, o sin área)
+        $gestorRoleId = \App\Models\Role::where('name', 'Gestor')->first()->id ?? 4;
+        $gestores = User::where('role_id', $gestorRoleId)
+            ->where(function ($q) use ($subarea) {
+                $q->whereNull('subarea_id')
+                    ->orWhere('subarea_id', $subarea->id);
+            })
+            ->get();
+
+        return view('subareas.edit', compact('subarea', 'areas', 'gestores'));
     }
 
     public function update(Request $request, string $id)
     {
+        $user = Auth::user();
+        $subarea = Subarea::findOrFail($id);
+
+        // Admin solo puede editar subáreas de su área
+        if ($user->role_id == 2 && $subarea->area_id !== $user->area_id) {
+            abort(403, 'No tienes permisos para editar esta subárea.');
+        }
+
         $request->validate([
             'area_id' => 'required|exists:areas,id',
             'nombre' => 'required|string|max:255',
             'descripcion' => 'nullable|string',
+            'gestor_id' => 'nullable|exists:users,id',
         ]);
 
-        $subarea = Subarea::findOrFail($id);
-        $subarea->update([
-            'area_id' => $request->area_id,
+        // Admin NO puede cambiar el área de la subárea
+        $newAreaId = $user->role_id == 2 ? $subarea->area_id : $request->area_id;
+
+        $data = [
+            'area_id' => $newAreaId,
             'nombre' => $request->nombre,
             'descripcion' => $request->descripcion,
-        ]);
+        ];
+
+        // Si viene gestor_id, asignarlo y activar la subárea
+        if ($request->has('gestor_id')) {
+            $data['gestor_id'] = $request->gestor_id ?: null;
+            $data['estado'] = $request->gestor_id ? 'activa' : 'sin_gestor';
+        }
+
+        $subarea->update($data);
 
         return redirect()->route('subareas.index')
             ->with('success', 'Subárea actualizada.');
@@ -108,7 +167,14 @@ class SubareaController extends Controller
 
     public function destroy(string $id)
     {
+        $user = Auth::user();
         $subarea = Subarea::findOrFail($id);
+
+        // Admin solo puede eliminar subáreas de su área
+        if ($user->role_id == 2 && $subarea->area_id !== $user->area_id) {
+            abort(403, 'No tienes permisos para eliminar esta subárea.');
+        }
+
         $subarea->delete();
 
         return redirect()->route('subareas.index')
@@ -260,7 +326,6 @@ class SubareaController extends Controller
             return response($finalPdfContent, 200)
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="preview_' . $subarea->nombre . '.pdf"');
-
         } catch (Throwable $e) {
             return response('Error al generar la preview: ' . $e->getMessage(), 500);
         }
@@ -300,7 +365,7 @@ class SubareaController extends Controller
             unset($templateFront);
 
             $backEmpty = empty($designBack) ||
-                        (empty($designBack['elements']) && empty($designBack['background']));
+                (empty($designBack['elements']) && empty($designBack['background']));
             $htmlBack  = null;
             if (!$backEmpty && !empty($templateBack)) {
                 $htmlBack = Blade::render($templateBack, $data);
@@ -312,7 +377,6 @@ class SubareaController extends Controller
             return response($finalPdfContent, 200)
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="preview.pdf"');
-
         } catch (Throwable $e) {
             return 'Error al renderizar la plantilla: ' . $e->getMessage();
         }

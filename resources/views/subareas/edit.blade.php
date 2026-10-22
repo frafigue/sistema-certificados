@@ -7,10 +7,10 @@
 @stop
 
 @section('content')
-    @if($errors->any())
+    @if ($errors->any())
         <div class="alert alert-danger">
             <ul class="mb-0">
-                @foreach($errors->all() as $error)
+                @foreach ($errors->all() as $error)
                     <li>{{ $error }}</li>
                 @endforeach
             </ul>
@@ -26,7 +26,7 @@
                 <div class="form-group">
                     <label for="area_id">Área</label>
                     <select name="area_id" id="area_id" class="form-control" required>
-                        @foreach($areas as $area)
+                        @foreach ($areas as $area)
                             <option value="{{ $area->id }}" {{ $subarea->area_id == $area->id ? 'selected' : '' }}>
                                 {{ $area->nombre }}
                             </option>
@@ -36,12 +36,25 @@
 
                 <div class="form-group">
                     <label for="nombre">Nombre de la Subárea</label>
-                    <input type="text" name="nombre" id="nombre" class="form-control" value="{{ $subarea->nombre }}" required>
+                    <input type="text" name="nombre" id="nombre" class="form-control" value="{{ $subarea->nombre }}"
+                        required>
                 </div>
 
                 <div class="form-group">
                     <label for="descripcion">Descripción</label>
                     <textarea name="descripcion" id="descripcion" class="form-control" rows="3">{{ $subarea->descripcion }}</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="gestor_id">Gestor</label>
+                    <select name="gestor_id" id="gestor_id" class="form-control">
+                        <option value="">— Sin gestor —</option>
+                        @foreach ($gestores ?? [] as $gestor)
+                            <option value="{{ $gestor->id }}" {{ $subarea->gestor_id == $gestor->id ? 'selected' : '' }}>
+                                {{ $gestor->name }} ({{ $gestor->email }})
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <button type="submit" class="btn btn-primary">

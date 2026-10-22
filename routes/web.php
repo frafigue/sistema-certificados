@@ -194,7 +194,7 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::middleware('is.root')->group(function () {
+    Route::middleware('can:is-admin-or-root')->group(function () {
         Route::resource('users', UserController::class);
         Route::patch('/users/{user}/reactivar', [UserController::class, 'reactivar'])->name('users.reactivar');
     });
