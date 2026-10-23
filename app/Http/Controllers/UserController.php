@@ -20,14 +20,29 @@ class UserController extends Controller
 
     public function create()
     {
-        $roles = Role::all();
-        $areas = Area::all();
-        $subareas = Subarea::with('area')->get();
+        $user = auth()->user();
+
+        if ($user->role_id == 1) {
+            // Root: todos los roles, todas las áreas, todas las subáreas
+            $roles = Role::all();
+            $areas = Area::all();
+            $subareas = Subarea::with('area')->get();
+        } else {
+            // Admin: solo rol Gestor, solo su área, solo sus subáreas
+            $roles = Role::where('name', 'Gestor')->get();
+            $areas = Area::where('id', $user->area_id)->get();
+            $subareas = Subarea::where('area_id', $user->area_id)->with('area')->get();
+        }
+
         return view('users.create', compact('roles', 'areas', 'subareas'));
     }
 
+
+
     public function store(Request $request)
     {
+        $currentUser = auth()->user();
+
         $request->validate([
             'name'       => ['required', 'string', 'max:255'],
             'email'      => ['required', 'string', 'email', 'max:255', 'unique:users'],
@@ -36,6 +51,15 @@ class UserController extends Controller
             'area_id'    => ['nullable', 'exists:areas,id'],
             'subarea_id' => ['nullable', 'exists:subareas,id'],
         ]);
+
+        // Admin: forzar rol Gestor y área propia
+        if ($currentUser->role_id != 1) {
+            $gestorRole = Role::where('name', 'Gestor')->first();
+            $request->merge([
+                'role_id' => $gestorRole->id,
+                'area_id' => $currentUser->area_id,
+            ]);
+        }
 
         $role = Role::find($request->role_id);
 
@@ -50,6 +74,16 @@ class UserController extends Controller
             return back()
                 ->withErrors(['subarea_id' => 'Debe seleccionar una subárea para el gestor.'])
                 ->withInput();
+        }
+
+        // Validar que la subárea pertenezca al área del Admin
+        if ($currentUser->role_id != 1 && $request->subarea_id) {
+            $subarea = Subarea::find($request->subarea_id);
+            if (!$subarea || $subarea->area_id != $currentUser->area_id) {
+                return back()
+                    ->withErrors(['subarea_id' => 'La subárea no pertenece a tu área.'])
+                    ->withInput();
+            }
         }
 
         $user = User::create([
@@ -77,7 +111,6 @@ class UserController extends Controller
             ]);
         }
 
-        // Si es Gestor, actualizar la subárea con su gestor_id
         if ($role->name === 'Gestor' && $request->subarea_id) {
             $subarea = Subarea::find($request->subarea_id);
             if ($subarea) {
@@ -93,14 +126,48 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
-        $roles = Role::all();
-        $areas = Area::all();
-        $subareas = Subarea::with('area')->get();
+        $currentUser = auth()->user();
+
+        // Admin solo puede editar gestores de su área
+        if ($currentUser->role_id != 1) {
+            if ($user->role?->name !== 'Gestor' || $user->area_id != $currentUser->area_id) {
+                abort(403, 'No tienes permisos para editar este usuario.');
+            }
+        }
+
+        if ($currentUser->role_id == 1) {
+            $roles = Role::all();
+            $areas = Area::all();
+            $subareas = Subarea::with('area')->get();
+        } else {
+            $roles = Role::where('name', 'Gestor')->get();
+            $areas = Area::where('id', $currentUser->area_id)->get();
+            $subareas = Subarea::where('area_id', $currentUser->area_id)->with('area')->get();
+        }
+
         return view('users.edit', compact('user', 'roles', 'areas', 'subareas'));
     }
 
     public function update(Request $request, User $user)
     {
+        $currentUser = auth()->user();
+
+        // Admin solo puede editar gestores de su área
+        if ($currentUser->role_id != 1) {
+            if ($user->role?->name !== 'Gestor' || $user->area_id != $currentUser->area_id) {
+                abort(403, 'No tienes permisos para editar este usuario.');
+            }
+        }
+
+        // Admin: forzar rol Gestor y área propia
+        if ($currentUser->role_id != 1) {
+            $gestorRole = Role::where('name', 'Gestor')->first();
+            $request->merge([
+                'role_id' => $gestorRole->id,
+                'area_id' => $currentUser->area_id,
+            ]);
+        }
+
         $request->validate([
             'name'       => ['required', 'string', 'max:255'],
             'email'      => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
@@ -138,6 +205,15 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        $currentUser = auth()->user();
+
+        // Admin solo puede eliminar gestores de su área
+        if ($currentUser->role_id != 1) {
+            if ($user->role?->name !== 'Gestor' || $user->area_id != $currentUser->area_id) {
+                abort(403, 'No tienes permisos para eliminar este usuario.');
+            }
+        }
+
         $roleName = $user->role?->name;
 
         if ($roleName === 'Root') {

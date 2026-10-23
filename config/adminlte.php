@@ -136,7 +136,7 @@ return [
             'text'  => 'Gestión de Usuarios',
             'route' => 'users.index',
             'icon'  => 'fas fa-fw fa-users-cog',
-            'can'   => 'is-root',
+            'can'   => 'is-admin-or-root',
         ],
         [
             'text'  => 'Resoluciones',
