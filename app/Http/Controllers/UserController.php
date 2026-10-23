@@ -14,7 +14,21 @@ class UserController extends Controller
 {
     public function index()
     {
-        $users = User::with(['role', 'area', 'subarea'])->latest()->paginate(10);
+        $currentUser = auth()->user();
+
+        if ($currentUser->role_id == 1) {
+            // Root: ve todos los usuarios
+            $users = User::with(['role', 'area', 'subarea'])->latest()->paginate(10);
+        } else {
+            // Admin: solo ve gestores de su área
+            $gestorRoleId = \App\Models\Role::where('name', 'Gestor')->first()->id ?? 4;
+            $users = User::with(['role', 'area', 'subarea'])
+                ->where('role_id', $gestorRoleId)
+                ->where('area_id', $currentUser->area_id)
+                ->latest()
+                ->paginate(10);
+        }
+
         return view('users.index', compact('users'));
     }
 

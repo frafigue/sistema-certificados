@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Subarea;
 use App\Models\Area;
+use App\Models\User;   // ← AGREGAR
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
