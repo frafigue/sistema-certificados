@@ -112,7 +112,7 @@ class CertificatesSheetImport implements ToCollection, WithHeadingRow, WithCalcu
         if (!empty($jobs)) {
 
             $batch = Bus::batch($jobs)
-
+                ->onQueue('certificates')   // ← AGREGAR
                 ->then(function (Batch $batch) use ($importHistoryId) {
 
                     ImportHistory::where('id', $importHistoryId)

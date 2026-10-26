@@ -157,6 +157,7 @@ class CertificateService
             'tipo_certificado'         => $this->deriveConditionCode($data['tipo_certificado']),
             'iniciales'                => $data['iniciales'] ?? null,
             'tres_ultimos_digitos_dni' => $data['3_ultimos_del_dni'] ?? null,
+            'subarea_id'               => $course->subarea_id,    // ← AGREGAR
         ]);
     }
 

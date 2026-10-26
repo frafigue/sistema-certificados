@@ -31,6 +31,7 @@ class Certificate extends Model
         'email_status',
         'email_sent_at',
         'email_error',
+        'subarea_id',   // ← AGREGAR
     ];
 
     public function course(): BelongsTo
