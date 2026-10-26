@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Imports;
+
 use App\Models\Person;
 use App\Models\User;
 use App\Models\Role;
@@ -29,6 +30,8 @@ class PersonsImport implements ToCollection, WithHeadingRow
     private $warnings        = [];
     private $withChanges     = [];
     private $processedRows   = 0;
+    private $userSubareaId = null;
+    private $userAreaId    = null;
 
     // ✅ DNIs que se agregaron a una nueva área (para registro en pivot post-import)
     private $newAreaAttachments = []; // ['dni' => X, 'area_id' => Y]
@@ -38,10 +41,13 @@ class PersonsImport implements ToCollection, WithHeadingRow
 
     public function __construct(bool $analyzeOnly = false, array $dniesToUpdate = [])
     {
+
         $this->analyzeOnly   = $analyzeOnly;
         $this->dniesToUpdate = $dniesToUpdate;
         $this->currentUser   = Auth::user();
-
+        // 📐 Guardar subarea_id y area_id del usuario (para asignar a personas nuevas)
+        $this->userSubareaId = $this->currentUser->subarea_id ?? null;
+        $this->userAreaId    = $this->currentUser->area_id    ?? null;
         $this->areasCache = Area::all()->keyBy(function ($area) {
             return $this->normalize($area->nombre);
         });
@@ -123,8 +129,13 @@ class PersonsImport implements ToCollection, WithHeadingRow
             $emailRaw   = $this->extractField($row, ['email', 'correo', 'mail', 'e-mail']);
             $email      = $this->normalizeEmail($emailRaw);
             $areaNombre = $this->extractField($row, [
-                'area_asignada', 'area asignada', 'areaasignada',
-                'area', 'departamento', 'sector', 'área'
+                'area_asignada',
+                'area asignada',
+                'areaasignada',
+                'area',
+                'departamento',
+                'sector',
+                'área'
             ]);
 
             if (empty($dni)) {
@@ -207,6 +218,7 @@ class PersonsImport implements ToCollection, WithHeadingRow
                 'telefono'  => $telefono ?: null,
                 'email'     => $email,
                 'area_id'   => $area->id,
+                'subarea_id' => $this->userSubareaId,   // ← agregar
             ];
 
             if ($existingPerson) {
@@ -257,12 +269,12 @@ class PersonsImport implements ToCollection, WithHeadingRow
                         $this->newAreaAttachments[] = [
                             'person_id' => $existingPerson->id,
                             'area_id'   => $area->id,
+                            'subarea_id' => $this->userSubareaId,   // ← agregar
                         ];
                         $this->importedCount++;
                         Log::info("✅ Persona DNI {$dni} agregada al área '{$areaNombre}' via pivot");
                     }
                 }
-
             } else {
                 // ✅ Persona nueva
                 if ($this->analyzeOnly) {
@@ -271,7 +283,6 @@ class PersonsImport implements ToCollection, WithHeadingRow
                     $this->createNewPerson($data, $rowNumber);
                 }
             }
-
         } catch (\Exception $e) {
             Log::error("ERROR en fila {$rowNumber}: " . $e->getMessage());
             $this->errors[] = ['fila' => $rowNumber, 'errores' => ["Error inesperado: " . $e->getMessage()], 'valores' => array_slice($row, 0, 4)];
@@ -336,7 +347,10 @@ class PersonsImport implements ToCollection, WithHeadingRow
         return $text;
     }
 
-    private function normalizeEmail($email)  { return strtolower(trim($email)); }
+    private function normalizeEmail($email)
+    {
+        return strtolower(trim($email));
+    }
     private function normalizeDni($dni)
     {
         $dni = trim($dni);
@@ -379,6 +393,7 @@ class PersonsImport implements ToCollection, WithHeadingRow
             'telefono'   => $data['telefono'] ?: null,
             'email'      => $data['email'],
             'area_id'    => $data['area_id'],
+            'subarea_id' => $data['subarea_id'],
             'created_at' => now(),
             'updated_at' => now(),
         ];
@@ -416,7 +431,7 @@ class PersonsImport implements ToCollection, WithHeadingRow
             \DB::table('persons')->upsert(
                 $this->batchUpdate,
                 ['dni'],
-                ['apellido', 'nombre', 'titulo', 'domicilio', 'telefono', 'email', 'area_id', 'updated_at']
+                ['apellido', 'nombre', 'titulo', 'domicilio', 'telefono', 'email', 'area_id', 'subarea_id', 'updated_at']
             );
             $dnis           = collect($this->batchUpdate)->pluck('dni')->toArray();
             $updatedPersons = Person::whereIn('dni', $dnis)->get();
@@ -443,15 +458,24 @@ class PersonsImport implements ToCollection, WithHeadingRow
         }
     }
 
-    public function forceFinalFlush() { $this->flushBatch(); }
+    public function forceFinalFlush()
+    {
+        $this->flushBatch();
+    }
 
     public function onImportCompleted()
     {
         Log::info('=== CREACIÓN DE USUARIOS PARA PERSONAS NUEVAS ===');
-        if (empty($this->createdDnis)) { Log::info('No hay personas nuevas.'); return; }
+        if (empty($this->createdDnis)) {
+            Log::info('No hay personas nuevas.');
+            return;
+        }
 
         $personaRole = Role::where('name', 'Persona')->first();
-        if (!$personaRole) { Log::error('Rol Persona no encontrado'); return; }
+        if (!$personaRole) {
+            Log::error('Rol Persona no encontrado');
+            return;
+        }
 
         $persons = Person::whereIn('dni', $this->createdDnis)->get();
 
@@ -491,7 +515,6 @@ class PersonsImport implements ToCollection, WithHeadingRow
                 ]);
 
                 Log::info("✅ Usuario creado para {$person->email}");
-
             } catch (\Exception $e) {
                 Log::error("❌ Error creando usuario para {$person->email}: " . $e->getMessage());
                 $this->errors[] = [
@@ -506,9 +529,24 @@ class PersonsImport implements ToCollection, WithHeadingRow
         }
     }
 
-    public function getImportedCount() { return $this->importedCount; }
-    public function getErrors()        { return $this->errors; }
-    public function getWarnings()      { return $this->warnings; }
-    public function getWithChanges()   { return $this->withChanges; }
-    public function getTotalRows()     { return $this->processedRows; }
+    public function getImportedCount()
+    {
+        return $this->importedCount;
+    }
+    public function getErrors()
+    {
+        return $this->errors;
+    }
+    public function getWarnings()
+    {
+        return $this->warnings;
+    }
+    public function getWithChanges()
+    {
+        return $this->withChanges;
+    }
+    public function getTotalRows()
+    {
+        return $this->processedRows;
+    }
 }
