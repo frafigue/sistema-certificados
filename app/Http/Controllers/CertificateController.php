@@ -1002,7 +1002,22 @@ HTML;
 
     public function sendPending()
     {
-        $certificates = Certificate::where('email_status', 'pendiente')->get();
+        $user = Auth::user();
+
+        $query = Certificate::where('email_status', 'pendiente');
+
+        // Filtrar según el rol del usuario
+        if ($user->role?->name === 'Gestor' && $user->subarea_id) {
+            $query->where('subarea_id', $user->subarea_id);
+        } elseif ($user->role?->name === 'Administrador' && $user->area_id) {
+            // Admin: filtrar por área (los certificados de su área, a través del curso)
+            $query->whereHas('course', function ($q) use ($user) {
+                $q->where('area_id', $user->area_id);
+            });
+        }
+        // Root: sin filtro (todos)
+
+        $certificates = $query->get();
 
         if ($certificates->isEmpty()) {
             return redirect()->back()->with('info', 'No hay certificados pendientes.');

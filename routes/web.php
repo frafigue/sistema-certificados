@@ -104,7 +104,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/batch-status/{id}', [CertificateExcelGeneratorController::class, 'batchStatus'])
         ->name('batch.status');
 
-        /*
+    /*
     |--------------------------------------------------------------------------
     | HISTORIAL DE IMPORTACIONES
     |--------------------------------------------------------------------------
@@ -115,7 +115,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/{importHistory}', [ImportHistoryController::class, 'show'])
             ->name('show');
     });
-    
+
     /*
     |--------------------------------------------------------------------------
     | ÁREAS, RESOLUCIONES, CURSOS
@@ -133,17 +133,32 @@ Route::middleware('auth')->group(function () {
     Route::resource('areas', AreaController::class);
     // Rutas de subáreas (solo Root y Admin)
     Route::middleware('auth')->group(function () {
-        Route::resource('subareas', SubareaController::class);
-        // Rutas de diseño de subáreas
+        // Rutas de diseño
         Route::get('/subareas/{subarea}/design', [SubareaController::class, 'designTemplate'])->name('subareas.design');
         Route::post('/subareas/{subarea}/save-template', [SubareaController::class, 'saveTemplate'])->name('subareas.design.save');
         Route::post('/subareas/{subarea}/upload-background', [SubareaController::class, 'uploadBackground'])->name('subareas.upload.background');
         Route::get('/subareas/{subarea}/preview', [SubareaController::class, 'previewTemplate'])->name('subareas.preview');
         Route::post('/subareas/{subarea}/preview-live', [SubareaController::class, 'previewFromDesign'])->name('subareas.preview.live');
         Route::delete('/subareas/{subarea}/clear-template', [SubareaController::class, 'clearTemplate'])->name('subareas.clear.template');
+
+        // Rutas de lectura (para todos los autenticados: Root, Admin y Gestor)
+        Route::get('subareas', [SubareaController::class, 'index'])->name('subareas.index');
+
+        // Rutas CRUD de escritura (solo Admin y Root: el Gestor NO puede crear/editar/eliminar)
+        // OJO: subareas/create VA ANTES de subareas/{subarea}
+        Route::middleware('can:is-admin-or-root')->group(function () {
+            Route::get('subareas/create', [SubareaController::class, 'create'])->name('subareas.create');
+            Route::post('subareas', [SubareaController::class, 'store'])->name('subareas.store');
+            Route::get('subareas/{subarea}/edit', [SubareaController::class, 'edit'])->name('subareas.edit');
+            Route::put('subareas/{subarea}', [SubareaController::class, 'update'])->name('subareas.update');
+            Route::delete('subareas/{subarea}', [SubareaController::class, 'destroy'])->name('subareas.destroy');
+        });
+
+        // Show genérico VA AL FINAL (para que no matchee create/edit)
+        Route::get('subareas/{subarea}', [SubareaController::class, 'show'])->name('subareas.show');
     });
 
-        /*
+    /*
     |--------------------------------------------------------------------------
     | REPOSITORIO DE PLANTILLAS (por usuario)
     |--------------------------------------------------------------------------
@@ -172,7 +187,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('my-certificates', [CertificateController::class, 'myCertificates'])->name('certificates.my');
     //Route::get('certificates/{certificate}/download', [CertificateController::class, 'downloadPdf'])->name('certificates.download');
-    
+
     Route::get('certificates/import/template', [CertificateController::class, 'downloadTemplate'])->name('certificates.template.download');
     Route::get('certificates/import', [CertificateController::class, 'showImportForm'])->name('certificates.import.form');
     Route::post('certificates/import', [CertificateController::class, 'import'])->name('certificates.import');
@@ -184,7 +199,7 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/certificates/send-pending', [CertificateController::class, 'sendPending'])
         ->name('certificates.sendPending')
-        ->middleware('can:is-admin-or-root');
+        ->middleware('can:is-admin-or-root-or-gestor');
     Route::get('certificates/{certificate}/download', [CertificateController::class, 'downloadPdf'])->name('certificates.download');
     Route::resource('certificates', CertificateController::class)->except(['show']);
 
@@ -198,7 +213,6 @@ Route::middleware('auth')->group(function () {
         Route::resource('users', UserController::class);
         Route::patch('/users/{user}/reactivar', [UserController::class, 'reactivar'])->name('users.reactivar');
     });
-
 });
 
 require __DIR__ . '/auth.php';

@@ -42,6 +42,9 @@ class SubareaController extends Controller
 
     public function create()
     {
+        if (Auth::user()->role_id == 4) {  // 4 = Gestor
+            abort(403, 'No tienes permisos para gestionar subáreas.');
+        }
         $user = Auth::user();
 
         $gestorRoleId = \App\Models\Role::where('name', 'Gestor')->first()->id ?? 4;
@@ -64,6 +67,9 @@ class SubareaController extends Controller
 
     public function store(Request $request)
     {
+        if (Auth::user()->role_id == 4) {  // 4 = Gestor
+            abort(403, 'No tienes permisos para gestionar subáreas.');
+        }
         $user = Auth::user();
 
         $request->validate([
@@ -101,6 +107,9 @@ class SubareaController extends Controller
 
     public function edit(string $id)
     {
+        if (Auth::user()->role_id == 4) {  // 4 = Gestor
+            abort(403, 'No tienes permisos para gestionar subáreas.');
+        }
         $user = Auth::user();
         $subarea = Subarea::findOrFail($id);
 
@@ -130,6 +139,9 @@ class SubareaController extends Controller
 
     public function update(Request $request, string $id)
     {
+        if (Auth::user()->role_id == 4) {  // 4 = Gestor
+            abort(403, 'No tienes permisos para gestionar subáreas.');
+        }
         $user = Auth::user();
         $subarea = Subarea::findOrFail($id);
 
@@ -168,6 +180,9 @@ class SubareaController extends Controller
 
     public function destroy(string $id)
     {
+        if (Auth::user()->role_id == 4) {  // 4 = Gestor
+            abort(403, 'No tienes permisos para gestionar subáreas.');
+        }
         $user = Auth::user();
         $subarea = Subarea::findOrFail($id);
 
