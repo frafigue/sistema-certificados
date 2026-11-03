@@ -15,39 +15,39 @@ return new class extends Migration
         // === AREAS ===
         Schema::table('areas', function (Blueprint $table) {
             $table->enum('template_paper_size', ['A4', 'A5', 'Oficio', 'Carta', 'custom'])
-                  ->default('A4')
-                  ->after('template_back');
+                ->default('A4')
+                ->after('template_back');
 
             $table->enum('template_orientation', ['portrait', 'landscape'])
-                  ->default('landscape')
-                  ->after('template_paper_size');
+                ->default('landscape')
+                ->after('template_paper_size');
 
             $table->decimal('template_width_cm', 8, 2)
-                  ->nullable()
-                  ->after('template_orientation');
+                ->nullable()
+                ->after('template_orientation');
 
             $table->decimal('template_height_cm', 8, 2)
-                  ->nullable()
-                  ->after('template_width_cm');
+                ->nullable()
+                ->after('template_width_cm');
         });
 
         // === SUBAREAS ===
         Schema::table('subareas', function (Blueprint $table) {
             $table->enum('template_paper_size', ['A4', 'A5', 'Oficio', 'Carta', 'custom'])
-                  ->default('A4')
-                  ->after('template_back');
+                ->default('A4')
+                ->after('template_back');
 
             $table->enum('template_orientation', ['portrait', 'landscape'])
-                  ->default('landscape')
-                  ->after('template_paper_size');
+                ->default('landscape')
+                ->after('template_paper_size');
 
             $table->decimal('template_width_cm', 8, 2)
-                  ->nullable()
-                  ->after('template_orientation');
+                ->nullable()
+                ->after('template_orientation');
 
             $table->decimal('template_height_cm', 8, 2)
-                  ->nullable()
-                  ->after('template_width_cm');
+                ->nullable()
+                ->after('template_width_cm');
         });
     }
 

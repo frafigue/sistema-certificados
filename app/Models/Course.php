@@ -28,7 +28,7 @@ class Course extends Model
         'signature1_path',
         'signature2_path',
         'capacitador_nombre',
-        'coordinador_nombre'
+        'coordinador_nombre',
     ];
 
     public function resolution(): BelongsTo
@@ -48,7 +48,8 @@ class Course extends Model
     {
         return $this->hasMany(CourseResponsable::class)->orderBy('orden');
     }
-        /**
+
+    /**
      * Subárea a la que pertenece este curso (nullable)
      */
     public function subarea()

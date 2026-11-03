@@ -2,48 +2,47 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\Area;
 use App\Models\Course;
 use App\Models\CourseResponsable;
 use App\Models\Resolution;
-use Illuminate\Support\Facades\Storage;
-use App\Models\Area;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class CourseController extends Controller
 {
     public function index(Request $request)
     {
-            $user  = Auth::user();
-            $query = Course::query();
+        $user = Auth::user();
+        $query = Course::query();
 
-            // Root ve todo
-            // Admin ve su área
-            // Gestor ve su subárea
-            // Persona no ve nada
-            if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
-                $query->where('area_id', $user->area_id);
-            } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
-                $query->where('subarea_id', $user->subarea_id);
-            } elseif ($user->role && $user->role->name === 'Persona') {
-                $query->where('id', 0); // No ve cursos
-            }
+        // Root ve todo
+        // Admin ve su área
+        // Gestor ve su subárea
+        // Persona no ve nada
+        if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
+            $query->where('area_id', $user->area_id);
+        } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
+            $query->where('subarea_id', $user->subarea_id);
+        } elseif ($user->role && $user->role->name === 'Persona') {
+            $query->where('id', 0); // No ve cursos
+        }
 
-            if ($request->filled('nombre')) {
-                $query->where('nombre', 'like', '%' . $request->nombre . '%');
-            }
-            if ($request->filled('nro_curso')) {
-                $query->where('nro_curso', 'like', '%' . $request->nro_curso . '%');
-            }
+        if ($request->filled('nombre')) {
+            $query->where('nombre', 'like', '%'.$request->nombre.'%');
+        }
+        if ($request->filled('nro_curso')) {
+            $query->where('nro_curso', 'like', '%'.$request->nro_curso.'%');
+        }
 
-            $courses = $query->with(['resolution', 'area', 'responsables'])
-                        ->latest()
-                        ->paginate(10)
-                        ->withQueryString();
+        $courses = $query->with(['resolution', 'area', 'responsables'])
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
 
-            return view('courses.index', compact('courses'));
+        return view('courses.index', compact('courses'));
     }
 
     public function create()
@@ -52,18 +51,18 @@ class CourseController extends Controller
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $resolutions = Resolution::where('area_id', $user->area_id)->get();
-            $areas       = Area::where('id', $user->area_id)->get();
+            $areas = Area::where('id', $user->area_id)->get();
         } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
             // Gestor: solo las resoluciones y áreas de su subárea
-            $subarea     = $user->subarea;
-            $areas       = Area::where('id', $subarea->area_id)->get();
+            $subarea = $user->subarea;
+            $areas = Area::where('id', $subarea->area_id)->get();
             $resolutions = Resolution::where('area_id', $subarea->area_id)->get();
         } else {
             $resolutions = Resolution::all();
-            $areas       = Area::all();
+            $areas = Area::all();
         }
 
-        $nextNroCurso = (int)(Course::max('nro_curso') ?? 0) + 1;
+        $nextNroCurso = (int) (Course::max('nro_curso') ?? 0) + 1;
 
         return view('courses.create', compact('resolutions', 'areas', 'nextNroCurso'));
     }
@@ -73,24 +72,24 @@ class CourseController extends Controller
         $user = Auth::user();
 
         $data = $request->validate([
-            'area_id'        => 'required|exists:areas,id',
-            'nro_curso'      => 'required|string|max:255',
-            'nombre'         => 'required|string|max:255',
-            'periodo'        => 'required|string|max:255',
-            'horas'          => 'required|integer|min:1',
-            'tipo_horas'     => 'required|in:Reloj,Cátedra',
-            'resolution_id'  => 'required|exists:resolutions,id',
-            'objetivo'       => 'nullable|string',
-            'contenido'      => 'nullable|string',
-            'maxima_nota'    => 'nullable|integer|min:1',
+            'area_id' => 'required|exists:areas,id',
+            'nro_curso' => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
+            'periodo' => 'required|string|max:255',
+            'horas' => 'required|integer|min:1',
+            'tipo_horas' => 'required|in:Reloj,Cátedra',
+            'resolution_id' => 'required|exists:resolutions,id',
+            'objetivo' => 'nullable|string',
+            'contenido' => 'nullable|string',
+            'maxima_nota' => 'nullable|integer|min:1',
 
-            'responsables'             => 'nullable|array',
-            'responsables.*.nombre'    => 'required|string|max:255',
-            'responsables.*.cargo'     => 'nullable|string|max:255',
+            'responsables' => 'nullable|array',
+            'responsables.*.nombre' => 'required|string|max:255',
+            'responsables.*.cargo' => 'nullable|string|max:255',
             'responsables.*.signature' => 'nullable|image|mimes:png|max:2048',
         ]);
 
-       // Validación para Admin
+        // Validación para Admin
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             if ($data['area_id'] != $user->area_id) {
                 return redirect()->back()
@@ -123,19 +122,19 @@ class CourseController extends Controller
 
         DB::beginTransaction();
         try {
-           
+
             $course = Course::create([
-                'area_id'       => $data['area_id'],
-                'subarea_id'    => $user->subarea_id ?? null,  // ← NUEVO
-                'nro_curso'     => $data['nro_curso'],
-                'nombre'        => $data['nombre'],
-                'periodo'       => $data['periodo'],
-                'horas'         => $data['horas'],
-                'tipo_horas'    => $data['tipo_horas'],
+                'area_id' => $data['area_id'],
+                'subarea_id' => $user->subarea_id ?? null,  // ← NUEVO
+                'nro_curso' => $data['nro_curso'],
+                'nombre' => $data['nombre'],
+                'periodo' => $data['periodo'],
+                'horas' => $data['horas'],
+                'tipo_horas' => $data['tipo_horas'],
                 'resolution_id' => $data['resolution_id'],
-                'objetivo'      => $data['objetivo'] ?? null,
-                'contenido'     => $data['contenido'] ?? null,
-                'maxima_nota'   => $data['maxima_nota'] ?? null,
+                'objetivo' => $data['objetivo'] ?? null,
+                'contenido' => $data['contenido'] ?? null,
+                'maxima_nota' => $data['maxima_nota'] ?? null,
             ]);
 
             if ($request->filled('responsables') && is_array($request->responsables)) {
@@ -145,22 +144,24 @@ class CourseController extends Controller
                         $signaturePath = $responsableData['signature']->store('signatures', 'public');
                     }
                     CourseResponsable::create([
-                        'course_id'      => $course->id,
-                        'nombre'         => $responsableData['nombre'],
-                        'cargo'          => $responsableData['cargo'] ?? null,
+                        'course_id' => $course->id,
+                        'nombre' => $responsableData['nombre'],
+                        'cargo' => $responsableData['cargo'] ?? null,
                         'signature_path' => $signaturePath,
-                        'orden'          => $index + 1,
+                        'orden' => $index + 1,
                     ]);
                 }
             }
 
             DB::commit();
+
             return redirect()->route('courses.index')->with('success', 'Curso creado exitosamente.');
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return redirect()->back()
-                ->withErrors(['error' => 'Error al crear el curso: ' . $e->getMessage()])
+                ->withErrors(['error' => 'Error al crear el curso: '.$e->getMessage()])
                 ->withInput();
         }
     }
@@ -182,6 +183,7 @@ class CourseController extends Controller
         }
 
         $course->load('responsables');
+
         return view('courses.show', compact('course'));
     }
 
@@ -203,17 +205,18 @@ class CourseController extends Controller
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             $resolutions = Resolution::where('area_id', $user->area_id)->get();
-            $areas       = Area::where('id', $user->area_id)->get();
+            $areas = Area::where('id', $user->area_id)->get();
         } elseif ($user->role && $user->role->name === 'Gestor' && $user->subarea_id) {
-            $subarea     = $user->subarea;
-            $areas       = Area::where('id', $subarea->area_id)->get();
+            $subarea = $user->subarea;
+            $areas = Area::where('id', $subarea->area_id)->get();
             $resolutions = Resolution::where('area_id', $subarea->area_id)->get();
         } else {
             $resolutions = Resolution::all();
-            $areas       = Area::all();
+            $areas = Area::all();
         }
 
         $course->load('responsables');
+
         return view('courses.edit', compact('course', 'resolutions', 'areas'));
     }
 
@@ -234,25 +237,25 @@ class CourseController extends Controller
         }
 
         $data = $request->validate([
-            'area_id'        => 'required|exists:areas,id',
-            'nro_curso'      => 'required|string|max:255',
-            'nombre'         => 'required|string|max:255',
-            'periodo'        => 'required|string|max:255',
-            'horas'          => 'required|integer|min:1',
-            'tipo_horas'     => 'required|in:Reloj,Cátedra',
-            'resolution_id'  => 'required|exists:resolutions,id',
-            'objetivo'       => 'nullable|string',
-            'contenido'      => 'nullable|string',
-            'maxima_nota'    => 'nullable|integer|min:1',
+            'area_id' => 'required|exists:areas,id',
+            'nro_curso' => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
+            'periodo' => 'required|string|max:255',
+            'horas' => 'required|integer|min:1',
+            'tipo_horas' => 'required|in:Reloj,Cátedra',
+            'resolution_id' => 'required|exists:resolutions,id',
+            'objetivo' => 'nullable|string',
+            'contenido' => 'nullable|string',
+            'maxima_nota' => 'nullable|integer|min:1',
 
-            'responsables'                    => 'nullable|array',
-            'responsables.*.id'               => 'nullable|exists:course_responsables,id',
-            'responsables.*.nombre'           => 'required|string|max:255',
-            'responsables.*.cargo'            => 'nullable|string|max:255',
-            'responsables.*.signature'        => 'nullable|image|mimes:png|max:2048',
+            'responsables' => 'nullable|array',
+            'responsables.*.id' => 'nullable|exists:course_responsables,id',
+            'responsables.*.nombre' => 'required|string|max:255',
+            'responsables.*.cargo' => 'nullable|string|max:255',
+            'responsables.*.signature' => 'nullable|image|mimes:png|max:2048',
             'responsables.*.remove_signature' => 'nullable|boolean',
 
-            'deleted_responsables'   => 'nullable|array',
+            'deleted_responsables' => 'nullable|array',
             'deleted_responsables.*' => 'exists:course_responsables,id',
         ]);
 
@@ -273,16 +276,16 @@ class CourseController extends Controller
         DB::beginTransaction();
         try {
             $course->update([
-                'area_id'       => $data['area_id'],
-                'nro_curso'     => $data['nro_curso'],
-                'nombre'        => $data['nombre'],
-                'periodo'       => $data['periodo'],
-                'horas'         => $data['horas'],
-                'tipo_horas'    => $data['tipo_horas'],
+                'area_id' => $data['area_id'],
+                'nro_curso' => $data['nro_curso'],
+                'nombre' => $data['nombre'],
+                'periodo' => $data['periodo'],
+                'horas' => $data['horas'],
+                'tipo_horas' => $data['tipo_horas'],
                 'resolution_id' => $data['resolution_id'],
-                'objetivo'      => $data['objetivo'] ?? null,
-                'contenido'     => $data['contenido'] ?? null,
-                'maxima_nota'   => $data['maxima_nota'] ?? null,
+                'objetivo' => $data['objetivo'] ?? null,
+                'contenido' => $data['contenido'] ?? null,
+                'maxima_nota' => $data['maxima_nota'] ?? null,
             ]);
 
             if ($request->filled('deleted_responsables') && is_array($request->deleted_responsables)) {
@@ -304,8 +307,8 @@ class CourseController extends Controller
                         if ($responsable && $responsable->course_id == $course->id) {
                             $updateData = [
                                 'nombre' => $responsableData['nombre'],
-                                'cargo'  => $responsableData['cargo'] ?? null,
-                                'orden'  => $index + 1,
+                                'cargo' => $responsableData['cargo'] ?? null,
+                                'orden' => $index + 1,
                             ];
                             if (isset($responsableData['signature']) && $responsableData['signature']) {
                                 if ($responsable->signature_path) {
@@ -327,23 +330,25 @@ class CourseController extends Controller
                             $signaturePath = $responsableData['signature']->store('signatures', 'public');
                         }
                         CourseResponsable::create([
-                            'course_id'      => $course->id,
-                            'nombre'         => $responsableData['nombre'],
-                            'cargo'          => $responsableData['cargo'] ?? null,
+                            'course_id' => $course->id,
+                            'nombre' => $responsableData['nombre'],
+                            'cargo' => $responsableData['cargo'] ?? null,
                             'signature_path' => $signaturePath,
-                            'orden'          => $index + 1,
+                            'orden' => $index + 1,
                         ]);
                     }
                 }
             }
 
             DB::commit();
+
             return redirect()->route('courses.index')->with('success', 'Curso actualizado exitosamente.');
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return redirect()->back()
-                ->withErrors(['error' => 'Error al actualizar el curso: ' . $e->getMessage()])
+                ->withErrors(['error' => 'Error al actualizar el curso: '.$e->getMessage()])
                 ->withInput();
         }
     }
@@ -380,12 +385,14 @@ class CourseController extends Controller
             $course->delete();
 
             DB::commit();
+
             return redirect()->route('courses.index')->with('success', 'Curso eliminado exitosamente.');
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return redirect()->back()
-                ->withErrors(['error' => 'Error al eliminar el curso: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Error al eliminar el curso: '.$e->getMessage()]);
         }
     }
 }

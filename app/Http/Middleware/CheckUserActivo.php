@@ -11,14 +11,14 @@ class CheckUserActivo
     public function handle(Request $request, Closure $next)
     {
         // ✅ Si hay un usuario logueado y está inactivo → expulsarlo
-        if (Auth::check() && !Auth::user()->activo) {
+        if (Auth::check() && ! Auth::user()->activo) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
             return redirect()->route('login')
                 ->withErrors([
-                    'email' => 'Tu cuenta ha sido desactivada. Contactá al administrador del sistema.'
+                    'email' => 'Tu cuenta ha sido desactivada. Contactá al administrador del sistema.',
                 ]);
         }
 

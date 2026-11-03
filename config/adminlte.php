@@ -112,20 +112,20 @@ return [
 
         // ── Navbar ───────────────────────────────────────────────────────────
         [
-            'type'         => 'navbar-search',
-            'text'         => 'search',
+            'type' => 'navbar-search',
+            'text' => 'search',
             'topnav_right' => true,
         ],
         [
-            'type'         => 'fullscreen-widget',
+            'type' => 'fullscreen-widget',
             'topnav_right' => true,
         ],
 
         // ── Sidebar ──────────────────────────────────────────────────────────
         [
-            'text'  => 'Dashboard',
+            'text' => 'Dashboard',
             'route' => 'home',
-            'icon'  => 'fas fa-fw fa-tachometer-alt',
+            'icon' => 'fas fa-fw fa-tachometer-alt',
         ],
 
         // ── GESTIÓN DEL SISTEMA ──────────────────────────────────────────────
@@ -133,77 +133,77 @@ return [
             'header' => 'GESTIÓN DEL SISTEMA',
         ],
         [
-            'text'  => 'Gestión de Usuarios',
+            'text' => 'Gestión de Usuarios',
             'route' => 'users.index',
-            'icon'  => 'fas fa-fw fa-users-cog',
-            'can'   => 'is-admin-or-root',
+            'icon' => 'fas fa-fw fa-users-cog',
+            'can' => 'is-admin-or-root',
         ],
         [
-            'text'  => 'Resoluciones',
+            'text' => 'Resoluciones',
             'route' => 'resolutions.index',
-            'icon'  => 'fas fa-fw fa-file-alt',
-            'can'   => 'is-admin-or-root-or-gestor',
+            'icon' => 'fas fa-fw fa-file-alt',
+            'can' => 'is-admin-or-root-or-gestor',
         ],
         [
-            'text'    => 'Áreas',
-            'icon'    => 'fas fa-fw fa-sitemap',
-            'can'     => 'is-admin-or-root',
+            'text' => 'Áreas',
+            'icon' => 'fas fa-fw fa-sitemap',
+            'can' => 'is-admin-or-root',
             'submenu' => [
                 [
-                    'text'  => 'Listado de Áreas',
+                    'text' => 'Listado de Áreas',
                     'route' => 'areas.index',
-                    'icon'  => 'fas fa-fw fa-list',
-                    
+                    'icon' => 'fas fa-fw fa-list',
+
                 ],
                 [
-                    'text'  => 'Subáreas',
+                    'text' => 'Subáreas',
                     'route' => 'subareas.index',
-                    'icon'  => 'fas fa-fw fa-layer-group',
+                    'icon' => 'fas fa-fw fa-layer-group',
                 ],
             ],
         ],
         // Menú para Gestor (sin submenú, directo a "Mi Subárea")
         [
-            'text'  => 'Mi Subárea',
+            'text' => 'Mi Subárea',
             'route' => 'subareas.index',
-            'icon'  => 'fas fa-fw fa-layer-group',
-            'can'   => 'is-gestor',
+            'icon' => 'fas fa-fw fa-layer-group',
+            'can' => 'is-gestor',
         ],
         [
-            'text'  => 'Cursos',
+            'text' => 'Cursos',
             'route' => 'courses.index',
-            'icon'  => 'fas fa-fw fa-graduation-cap',
-            'can'   => 'is-admin-or-root-or-gestor',
+            'icon' => 'fas fa-fw fa-graduation-cap',
+            'can' => 'is-admin-or-root-or-gestor',
         ],
         [
-            'text'  => 'Personas',
+            'text' => 'Personas',
             'route' => 'persons.index',
-            'icon'  => 'fas fa-fw fa-users',
-            'can'   => 'is-admin-or-root-or-gestor',
+            'icon' => 'fas fa-fw fa-users',
+            'can' => 'is-admin-or-root-or-gestor',
         ],
         [
-            'text'  => 'Certificados',
+            'text' => 'Certificados',
             'route' => 'certificates.index',
-            'icon'  => 'fas fa-fw fa-certificate',
-            'can'   => 'is-admin-or-root-or-gestor',
+            'icon' => 'fas fa-fw fa-certificate',
+            'can' => 'is-admin-or-root-or-gestor',
         ],
 
         // ── MI CUENTA ────────────────────────────────────────────────────────
         [
             'header' => 'MI CUENTA',
-            'can'    => 'is-persona',
+            'can' => 'is-persona',
         ],
         [
-            'text'  => 'Mi Perfil',
+            'text' => 'Mi Perfil',
             'route' => 'profile.edit',
-            'icon'  => 'fas fa-fw fa-user',
-            'can'   => 'is-persona',
+            'icon' => 'fas fa-fw fa-user',
+            'can' => 'is-persona',
         ],
         [
-            'text'  => 'Mis Certificados',
+            'text' => 'Mis Certificados',
             'route' => 'certificates.index',
-            'icon'  => 'fas fa-fw fa-certificate',
-            'can'   => 'is-persona',
+            'icon' => 'fas fa-fw fa-certificate',
+            'can' => 'is-persona',
         ],
 
     ],
@@ -223,18 +223,18 @@ return [
             'active' => false,
             'files' => [
                 [
-                    'type'     => 'js',
-                    'asset'    => false,
+                    'type' => 'js',
+                    'asset' => false,
                     'location' => '//cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js',
                 ],
                 [
-                    'type'     => 'js',
-                    'asset'    => false,
+                    'type' => 'js',
+                    'asset' => false,
                     'location' => '//cdn.datatables.net/1.10.19/js/dataTables.bootstrap4.min.js',
                 ],
                 [
-                    'type'     => 'css',
-                    'asset'    => false,
+                    'type' => 'css',
+                    'asset' => false,
                     'location' => '//cdn.datatables.net/1.10.19/css/dataTables.bootstrap4.min.css',
                 ],
             ],
@@ -243,13 +243,13 @@ return [
             'active' => true,
             'files' => [
                 [
-                    'type'     => 'js',
-                    'asset'    => false,
+                    'type' => 'js',
+                    'asset' => false,
                     'location' => '//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/js/select2.min.js',
                 ],
                 [
-                    'type'     => 'css',
-                    'asset'    => false,
+                    'type' => 'css',
+                    'asset' => false,
                     'location' => '//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/css/select2.css',
                 ],
             ],
@@ -258,8 +258,8 @@ return [
             'active' => false,
             'files' => [
                 [
-                    'type'     => 'js',
-                    'asset'    => false,
+                    'type' => 'js',
+                    'asset' => false,
                     'location' => '//cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.0/Chart.bundle.min.js',
                 ],
             ],
@@ -268,8 +268,8 @@ return [
             'active' => true,
             'files' => [
                 [
-                    'type'     => 'js',
-                    'asset'    => true,
+                    'type' => 'js',
+                    'asset' => true,
                     'location' => '//cdn.jsdelivr.net/npm/sweetalert2@11',
                 ],
             ],
@@ -278,13 +278,13 @@ return [
             'active' => false,
             'files' => [
                 [
-                    'type'     => 'css',
-                    'asset'    => false,
+                    'type' => 'css',
+                    'asset' => false,
                     'location' => '//cdnjs.cloudflare.com/ajax/libs/pace/1.0.2/themes/blue/pace-theme-center-radar.min.css',
                 ],
                 [
-                    'type'     => 'js',
-                    'asset'    => false,
+                    'type' => 'js',
+                    'asset' => false,
                     'location' => '//cdnjs.cloudflare.com/ajax/libs/pace/1.0.2/pace.min.js',
                 ],
             ],
@@ -293,21 +293,21 @@ return [
 
     'iframe' => [
         'default_tab' => [
-            'url'   => null,
+            'url' => null,
             'title' => null,
         ],
         'buttons' => [
-            'close'           => true,
-            'close_all'       => true,
+            'close' => true,
+            'close_all' => true,
             'close_all_other' => true,
-            'scroll_left'     => true,
-            'scroll_right'    => true,
-            'fullscreen'      => true,
+            'scroll_left' => true,
+            'scroll_right' => true,
+            'fullscreen' => true,
         ],
         'options' => [
-            'loading_screen'    => 1000,
+            'loading_screen' => 1000,
             'auto_show_new_tab' => true,
-            'use_navbar_items'  => true,
+            'use_navbar_items' => true,
         ],
     ],
 

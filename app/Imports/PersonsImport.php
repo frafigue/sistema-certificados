@@ -2,65 +2,82 @@
 
 namespace App\Imports;
 
-use App\Models\Person;
-use App\Models\User;
-use App\Models\Role;
 use App\Models\Area;
+use App\Models\Person;
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class PersonsImport implements ToCollection, WithHeadingRow
 {
-    private $areasCache      = [];
-    private $personsCache    = [];
-    private $emailsCache     = [];
-    private $createdDnis     = [];
-    private $processedDnis   = [];
+    private $areasCache = [];
+
+    private $personsCache = [];
+
+    private $emailsCache = [];
+
+    private $createdDnis = [];
+
+    private $processedDnis = [];
+
     private $processedEmails = [];
-    private $batchInsert     = [];
-    private $batchUpdate     = [];
-    private $batchSize       = 500;
+
+    private $batchInsert = [];
+
+    private $batchUpdate = [];
+
+    private $batchSize = 500;
+
     private $currentUser;
-    private $importedCount   = 0;
-    private $errors          = [];
-    private $warnings        = [];
-    private $withChanges     = [];
-    private $processedRows   = 0;
+
+    private $importedCount = 0;
+
+    private $errors = [];
+
+    private $warnings = [];
+
+    private $withChanges = [];
+
+    private $processedRows = 0;
+
     private $userSubareaId = null;
-    private $userAreaId    = null;
+
+    private $userAreaId = null;
 
     // ✅ DNIs que se agregaron a una nueva área (para registro en pivot post-import)
     private $newAreaAttachments = []; // ['dni' => X, 'area_id' => Y]
 
-    private bool  $analyzeOnly   = false;
+    private bool $analyzeOnly = false;
+
     private array $dniesToUpdate = [];
 
     public function __construct(bool $analyzeOnly = false, array $dniesToUpdate = [])
     {
 
-        $this->analyzeOnly   = $analyzeOnly;
+        $this->analyzeOnly = $analyzeOnly;
         $this->dniesToUpdate = $dniesToUpdate;
-        $this->currentUser   = Auth::user();
+        $this->currentUser = Auth::user();
         // 📐 Guardar subarea_id y area_id del usuario (para asignar a personas nuevas)
         $this->userSubareaId = $this->currentUser->subarea_id ?? null;
-        $this->userAreaId    = $this->currentUser->area_id    ?? null;
+        $this->userAreaId = $this->currentUser->area_id ?? null;
         $this->areasCache = Area::all()->keyBy(function ($area) {
             return $this->normalize($area->nombre);
         });
         $this->personsCache = Person::all()->keyBy('dni');
-        $this->emailsCache  = Person::all()->mapWithKeys(function ($person) {
+        $this->emailsCache = Person::all()->mapWithKeys(function ($person) {
             return [$this->normalizeEmail($person->email) => $person->dni];
         })->toArray();
     }
 
     public function collection(Collection $rows)
     {
-        Log::info('=== INICIANDO ' . ($this->analyzeOnly ? 'ANÁLISIS' : 'IMPORTACIÓN') . ' DE PERSONAS ===');
-        Log::info('Total de filas en el archivo: ' . $rows->count());
+        Log::info('=== INICIANDO '.($this->analyzeOnly ? 'ANÁLISIS' : 'IMPORTACIÓN').' DE PERSONAS ===');
+        Log::info('Total de filas en el archivo: '.$rows->count());
 
         $rowNumber = 1;
 
@@ -81,29 +98,32 @@ class PersonsImport implements ToCollection, WithHeadingRow
             $this->processRow($rowArray, $rowNumber);
         }
 
-        if (!$this->analyzeOnly) {
+        if (! $this->analyzeOnly) {
             $this->flushBatch();
         }
 
-        Log::info("=== RESUMEN ===");
+        Log::info('=== RESUMEN ===');
         Log::info("Filas procesadas: {$this->processedRows}");
         Log::info("Nuevas: {$this->importedCount}");
-        Log::info("Sin cambios: " . count($this->warnings));
-        Log::info("Con cambios: " . count($this->withChanges));
-        Log::info("Errores: " . count($this->errors));
+        Log::info('Sin cambios: '.count($this->warnings));
+        Log::info('Con cambios: '.count($this->withChanges));
+        Log::info('Errores: '.count($this->errors));
     }
 
     private function isEmptyRow($row)
     {
         foreach ($row as $value) {
-            if (!empty(trim($value ?? ''))) return false;
+            if (! empty(trim($value ?? ''))) {
+                return false;
+            }
         }
+
         return true;
     }
 
     private function isInfoRow($row)
     {
-        $values    = array_values($row);
+        $values = array_values($row);
         $firstCell = trim((string) ($values[0] ?? ''));
 
         $notaPrefixes = ['⚠', 'NOTA', 'Áreas disponibles', 'Curso:', 'Área:'];
@@ -119,15 +139,15 @@ class PersonsImport implements ToCollection, WithHeadingRow
     private function processRow($row, $rowNumber)
     {
         try {
-            $dniRaw     = $this->extractField($row, ['dni', 'documento', 'cedula', 'identificacion']);
-            $dni        = $this->normalizeDni($dniRaw);
-            $apellido   = $this->extractField($row, ['apellido', 'lastname', 'surname', 'apellidos']);
-            $nombre     = $this->extractField($row, ['nombre', 'name', 'firstname', 'nombres']);
-            $titulo     = $this->extractField($row, ['titulo', 'title', 'cargo', 'profesion']);
-            $domicilio  = $this->extractField($row, ['domicilio', 'direccion', 'address']);
-            $telefono   = $this->extractField($row, ['telefono', 'phone', 'celular', 'contacto', 'teléfono']);
-            $emailRaw   = $this->extractField($row, ['email', 'correo', 'mail', 'e-mail']);
-            $email      = $this->normalizeEmail($emailRaw);
+            $dniRaw = $this->extractField($row, ['dni', 'documento', 'cedula', 'identificacion']);
+            $dni = $this->normalizeDni($dniRaw);
+            $apellido = $this->extractField($row, ['apellido', 'lastname', 'surname', 'apellidos']);
+            $nombre = $this->extractField($row, ['nombre', 'name', 'firstname', 'nombres']);
+            $titulo = $this->extractField($row, ['titulo', 'title', 'cargo', 'profesion']);
+            $domicilio = $this->extractField($row, ['domicilio', 'direccion', 'address']);
+            $telefono = $this->extractField($row, ['telefono', 'phone', 'celular', 'contacto', 'teléfono']);
+            $emailRaw = $this->extractField($row, ['email', 'correo', 'mail', 'e-mail']);
+            $email = $this->normalizeEmail($emailRaw);
             $areaNombre = $this->extractField($row, [
                 'area_asignada',
                 'area asignada',
@@ -135,30 +155,34 @@ class PersonsImport implements ToCollection, WithHeadingRow
                 'area',
                 'departamento',
                 'sector',
-                'área'
+                'área',
             ]);
 
             if (empty($dni)) {
                 $this->errors[] = [
-                    'fila'    => $rowNumber,
-                    'errores' => ['El DNI es obligatorio. El valor ingresado "' . trim($dniRaw) . '" no es un DNI válido (solo se permiten números).'],
+                    'fila' => $rowNumber,
+                    'errores' => ['El DNI es obligatorio. El valor ingresado "'.trim($dniRaw).'" no es un DNI válido (solo se permiten números).'],
                     'valores' => [$dniRaw, $apellido, $nombre, $email],
                 ];
+
                 return;
             }
 
             if (isset($this->processedDnis[$dni])) {
-                $this->errors[] = ['fila' => $rowNumber, 'errores' => ["DNI duplicado dentro del mismo archivo Excel"], 'valores' => [$dni, $email]];
+                $this->errors[] = ['fila' => $rowNumber, 'errores' => ['DNI duplicado dentro del mismo archivo Excel'], 'valores' => [$dni, $email]];
+
                 return;
             }
 
             if (isset($this->processedEmails[$email])) {
-                $this->errors[] = ['fila' => $rowNumber, 'errores' => ["Email duplicado dentro del mismo archivo Excel"], 'valores' => [$dni, $email]];
+                $this->errors[] = ['fila' => $rowNumber, 'errores' => ['Email duplicado dentro del mismo archivo Excel'], 'valores' => [$dni, $email]];
+
                 return;
             }
 
             if (isset($this->emailsCache[$email]) && $this->emailsCache[$email] !== $dni) {
                 $this->errors[] = ['fila' => $rowNumber, 'errores' => ["El email '{$email}' ya pertenece a otro DNI ({$this->emailsCache[$email]}) en el sistema"], 'valores' => [$dni, $email, $apellido, $nombre]];
+
                 return;
             }
 
@@ -166,58 +190,73 @@ class PersonsImport implements ToCollection, WithHeadingRow
             if ($personByEmail) {
                 $this->errors[] = ['fila' => $rowNumber, 'errores' => ["El email '{$email}' ya está asignado a otra persona (DNI: {$personByEmail->dni})"], 'valores' => [$dni, $email, $apellido, $nombre]];
                 $this->emailsCache[$email] = $personByEmail->dni;
+
                 return;
             }
 
-            $this->processedDnis[$dni]     = true;
+            $this->processedDnis[$dni] = true;
             $this->processedEmails[$email] = true;
 
             $missingFields = [];
-            if (empty($dni))        $missingFields[] = 'DNI';
-            if (empty($apellido))   $missingFields[] = 'Apellido';
-            if (empty($nombre))     $missingFields[] = 'Nombre';
-            if (empty($email))      $missingFields[] = 'Email';
-            if (empty($areaNombre)) $missingFields[] = 'Área Asignada';
+            if (empty($dni)) {
+                $missingFields[] = 'DNI';
+            }
+            if (empty($apellido)) {
+                $missingFields[] = 'Apellido';
+            }
+            if (empty($nombre)) {
+                $missingFields[] = 'Nombre';
+            }
+            if (empty($email)) {
+                $missingFields[] = 'Email';
+            }
+            if (empty($areaNombre)) {
+                $missingFields[] = 'Área Asignada';
+            }
 
-            if (!empty($missingFields)) {
-                $this->errors[] = ['fila' => $rowNumber, 'errores' => ["Campos obligatorios faltantes: " . implode(', ', $missingFields)], 'valores' => [$dni, $apellido, $nombre, $email]];
+            if (! empty($missingFields)) {
+                $this->errors[] = ['fila' => $rowNumber, 'errores' => ['Campos obligatorios faltantes: '.implode(', ', $missingFields)], 'valores' => [$dni, $apellido, $nombre, $email]];
+
                 return;
             }
 
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $this->errors[] = [
-                    'fila'    => $rowNumber,
+                    'fila' => $rowNumber,
                     'errores' => ["El email '{$email}' no tiene un formato válido (ejemplo correcto: nombre@dominio.com)"],
                     'valores' => [$dni, $apellido, $nombre, $email],
                 ];
+
                 return;
             }
 
             $areaKey = $this->normalize($areaNombre);
-            $area    = $this->areasCache[$areaKey] ?? null;
+            $area = $this->areasCache[$areaKey] ?? null;
 
-            if (!$area) {
+            if (! $area) {
                 $areasDisponibles = collect($this->areasCache)->pluck('nombre')->implode(', ');
-                $this->errors[] = ['fila' => $rowNumber, 'errores' => ["El área '{$areaNombre}' no existe en el sistema. Áreas disponibles: " . $areasDisponibles], 'valores' => [$dni, $apellido, $nombre, $areaNombre]];
+                $this->errors[] = ['fila' => $rowNumber, 'errores' => ["El área '{$areaNombre}' no existe en el sistema. Áreas disponibles: ".$areasDisponibles], 'valores' => [$dni, $apellido, $nombre, $areaNombre]];
+
                 return;
             }
 
             if ($this->currentUser->role->name === 'Administrador' && $this->currentUser->area_id != $area->id) {
                 $this->errors[] = ['fila' => $rowNumber, 'errores' => ["No tenés permisos para asignar personas al área '{$areaNombre}'"], 'valores' => [$dni, $apellido, $nombre, $areaNombre]];
+
                 return;
             }
 
             $existingPerson = $this->personsCache[$dni] ?? null;
 
             $data = [
-                'dni'       => $dni,
-                'apellido'  => $apellido,
-                'nombre'    => $nombre,
-                'titulo'    => $titulo ?: null,
+                'dni' => $dni,
+                'apellido' => $apellido,
+                'nombre' => $nombre,
+                'titulo' => $titulo ?: null,
                 'domicilio' => $domicilio ?: null,
-                'telefono'  => $telefono ?: null,
-                'email'     => $email,
-                'area_id'   => $area->id,
+                'telefono' => $telefono ?: null,
+                'email' => $email,
+                'area_id' => $area->id,
                 'subarea_id' => $this->userSubareaId,   // ← agregar
             ];
 
@@ -235,26 +274,26 @@ class PersonsImport implements ToCollection, WithHeadingRow
 
                     if (empty($cambios)) {
                         $this->warnings[] = [
-                            'fila'     => $rowNumber,
-                            'dni'      => $dni,
-                            'nombre'   => $nombre,
+                            'fila' => $rowNumber,
+                            'dni' => $dni,
+                            'nombre' => $nombre,
                             'apellido' => $apellido,
-                            'mensaje'  => "La persona con DNI {$dni} ({$nombre} {$apellido}) ya existe en esta área y no tiene cambios.",
-                            'valores'  => [$dni, $nombre, $apellido, $email],
+                            'mensaje' => "La persona con DNI {$dni} ({$nombre} {$apellido}) ya existe en esta área y no tiene cambios.",
+                            'valores' => [$dni, $nombre, $apellido, $email],
                         ];
                     } else {
                         $this->withChanges[] = [
-                            'fila'         => $rowNumber,
-                            'dni'          => $dni,
-                            'nombre'       => $nombre,
-                            'apellido'     => $apellido,
-                            'cambios'      => $cambios,
+                            'fila' => $rowNumber,
+                            'dni' => $dni,
+                            'nombre' => $nombre,
+                            'apellido' => $apellido,
+                            'cambios' => $cambios,
                             'datos_nuevos' => $data,
-                            'mensaje'      => "La persona con DNI {$dni} ({$nombre} {$apellido}) ya existe con datos diferentes.",
-                            'valores'      => [$dni, $nombre, $apellido, $email],
+                            'mensaje' => "La persona con DNI {$dni} ({$nombre} {$apellido}) ya existe con datos diferentes.",
+                            'valores' => [$dni, $nombre, $apellido, $email],
                         ];
 
-                        if (!$this->analyzeOnly && in_array($dni, $this->dniesToUpdate)) {
+                        if (! $this->analyzeOnly && in_array($dni, $this->dniesToUpdate)) {
                             $this->updateExistingPerson($existingPerson, $data, $rowNumber);
                         }
                     }
@@ -268,7 +307,7 @@ class PersonsImport implements ToCollection, WithHeadingRow
                         // En modo importación: registrar en pivot
                         $this->newAreaAttachments[] = [
                             'person_id' => $existingPerson->id,
-                            'area_id'   => $area->id,
+                            'area_id' => $area->id,
                             'subarea_id' => $this->userSubareaId,   // ← agregar
                         ];
                         $this->importedCount++;
@@ -284,31 +323,31 @@ class PersonsImport implements ToCollection, WithHeadingRow
                 }
             }
         } catch (\Exception $e) {
-            Log::error("ERROR en fila {$rowNumber}: " . $e->getMessage());
-            $this->errors[] = ['fila' => $rowNumber, 'errores' => ["Error inesperado: " . $e->getMessage()], 'valores' => array_slice($row, 0, 4)];
+            Log::error("ERROR en fila {$rowNumber}: ".$e->getMessage());
+            $this->errors[] = ['fila' => $rowNumber, 'errores' => ['Error inesperado: '.$e->getMessage()], 'valores' => array_slice($row, 0, 4)];
         }
     }
 
     private function detectChanges(Person $person, array $newData, string $areaNombre): array
     {
         $cambios = [];
-        $campos  = [
-            'apellido'  => 'Apellido',
-            'nombre'    => 'Nombre',
-            'titulo'    => 'Título',
+        $campos = [
+            'apellido' => 'Apellido',
+            'nombre' => 'Nombre',
+            'titulo' => 'Título',
             'domicilio' => 'Domicilio',
-            'telefono'  => 'Teléfono',
-            'email'     => 'Email',
+            'telefono' => 'Teléfono',
+            'email' => 'Email',
         ];
 
         foreach ($campos as $field => $label) {
             $valorActual = trim((string) ($person->$field ?? ''));
-            $valorNuevo  = trim((string) ($newData[$field] ?? ''));
+            $valorNuevo = trim((string) ($newData[$field] ?? ''));
             if ($valorActual !== $valorNuevo) {
                 $cambios[] = [
-                    'campo'  => $label,
+                    'campo' => $label,
                     'actual' => $valorActual ?: '(vacío)',
-                    'nuevo'  => $valorNuevo ?: '(vacío)',
+                    'nuevo' => $valorNuevo ?: '(vacío)',
                 ];
             }
         }
@@ -330,11 +369,12 @@ class PersonsImport implements ToCollection, WithHeadingRow
             $normalizedKey = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $key));
             foreach ($possibleNames as $name) {
                 $normalizedName = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $name));
-                if ($normalizedKey === $normalizedName && !empty(trim($value ?? ''))) {
+                if ($normalizedKey === $normalizedName && ! empty(trim($value ?? ''))) {
                     return trim($value);
                 }
             }
         }
+
         return '';
     }
 
@@ -344,6 +384,7 @@ class PersonsImport implements ToCollection, WithHeadingRow
         $text = strtolower($text);
         $text = iconv('UTF-8', 'ASCII//TRANSLIT', $text);
         $text = preg_replace('/[^a-z0-9]/', '', $text);
+
         return $text;
     }
 
@@ -351,10 +392,12 @@ class PersonsImport implements ToCollection, WithHeadingRow
     {
         return strtolower(trim($email));
     }
+
     private function normalizeDni($dni)
     {
         $dni = trim($dni);
         $dni = strtoupper($dni); // opcional pero recomendado
+
         return $dni;
     }
 
@@ -363,14 +406,14 @@ class PersonsImport implements ToCollection, WithHeadingRow
         $oldEmailNormalized = $this->normalizeEmail($person->email);
 
         $this->batchUpdate[] = [
-            'dni'        => $person->dni,
-            'apellido'   => $data['apellido'],
-            'nombre'     => $data['nombre'],
-            'titulo'     => $data['titulo'] ?: null,
-            'domicilio'  => $data['domicilio'] ?: null,
-            'telefono'   => $data['telefono'] ?: null,
-            'email'      => $data['email'],
-            'area_id'    => $data['area_id'],
+            'dni' => $person->dni,
+            'apellido' => $data['apellido'],
+            'nombre' => $data['nombre'],
+            'titulo' => $data['titulo'] ?: null,
+            'domicilio' => $data['domicilio'] ?: null,
+            'telefono' => $data['telefono'] ?: null,
+            'email' => $data['email'],
+            'area_id' => $data['area_id'],
             'updated_at' => now(),
         ];
 
@@ -385,14 +428,14 @@ class PersonsImport implements ToCollection, WithHeadingRow
     private function createNewPerson($data, $rowNumber)
     {
         $this->batchInsert[] = [
-            'dni'        => $data['dni'],
-            'apellido'   => $data['apellido'],
-            'nombre'     => $data['nombre'],
-            'titulo'     => $data['titulo'] ?: null,
-            'domicilio'  => $data['domicilio'] ?: null,
-            'telefono'   => $data['telefono'] ?: null,
-            'email'      => $data['email'],
-            'area_id'    => $data['area_id'],
+            'dni' => $data['dni'],
+            'apellido' => $data['apellido'],
+            'nombre' => $data['nombre'],
+            'titulo' => $data['titulo'] ?: null,
+            'domicilio' => $data['domicilio'] ?: null,
+            'telefono' => $data['telefono'] ?: null,
+            'email' => $data['email'],
+            'area_id' => $data['area_id'],
             'subarea_id' => $data['subarea_id'],
             'created_at' => now(),
             'updated_at' => now(),
@@ -415,45 +458,45 @@ class PersonsImport implements ToCollection, WithHeadingRow
 
     private function flushBatch()
     {
-        if (!empty($this->batchInsert)) {
+        if (! empty($this->batchInsert)) {
             \DB::table('persons')->insert($this->batchInsert);
-            $dnis            = collect($this->batchInsert)->pluck('dni')->toArray();
+            $dnis = collect($this->batchInsert)->pluck('dni')->toArray();
             $insertedPersons = Person::whereIn('dni', $dnis)->get();
             foreach ($insertedPersons as $person) {
                 $this->personsCache[$person->dni] = $person;
                 $this->emailsCache[$this->normalizeEmail($person->email)] = $person->dni;
             }
-            Log::info("✅ Batch INSERT: " . count($this->batchInsert) . " personas nuevas");
+            Log::info('✅ Batch INSERT: '.count($this->batchInsert).' personas nuevas');
             $this->batchInsert = [];
         }
 
-        if (!empty($this->batchUpdate)) {
+        if (! empty($this->batchUpdate)) {
             \DB::table('persons')->upsert(
                 $this->batchUpdate,
                 ['dni'],
                 ['apellido', 'nombre', 'titulo', 'domicilio', 'telefono', 'email', 'area_id', 'subarea_id', 'updated_at']
             );
-            $dnis           = collect($this->batchUpdate)->pluck('dni')->toArray();
+            $dnis = collect($this->batchUpdate)->pluck('dni')->toArray();
             $updatedPersons = Person::whereIn('dni', $dnis)->get();
             foreach ($updatedPersons as $person) {
                 $this->personsCache[$person->dni] = $person;
                 $this->emailsCache[$this->normalizeEmail($person->email)] = $person->dni;
             }
-            Log::info("✅ Batch UPDATE: " . count($this->batchUpdate) . " personas actualizadas");
+            Log::info('✅ Batch UPDATE: '.count($this->batchUpdate).' personas actualizadas');
             $this->batchUpdate = [];
         }
 
         // ✅ NUEVO: registrar en pivot las personas que se agregaron a una nueva área
-        if (!empty($this->newAreaAttachments)) {
+        if (! empty($this->newAreaAttachments)) {
             foreach ($this->newAreaAttachments as $attachment) {
                 \DB::table('area_person')->insertOrIgnore([
-                    'person_id'  => $attachment['person_id'],
-                    'area_id'    => $attachment['area_id'],
+                    'person_id' => $attachment['person_id'],
+                    'area_id' => $attachment['area_id'],
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
             }
-            Log::info("✅ Pivot area_person: " . count($this->newAreaAttachments) . " relaciones nuevas registradas");
+            Log::info('✅ Pivot area_person: '.count($this->newAreaAttachments).' relaciones nuevas registradas');
             $this->newAreaAttachments = [];
         }
     }
@@ -468,12 +511,14 @@ class PersonsImport implements ToCollection, WithHeadingRow
         Log::info('=== CREACIÓN DE USUARIOS PARA PERSONAS NUEVAS ===');
         if (empty($this->createdDnis)) {
             Log::info('No hay personas nuevas.');
+
             return;
         }
 
         $personaRole = Role::where('name', 'Persona')->first();
-        if (!$personaRole) {
+        if (! $personaRole) {
             Log::error('Rol Persona no encontrado');
+
             return;
         }
 
@@ -481,47 +526,50 @@ class PersonsImport implements ToCollection, WithHeadingRow
 
         foreach ($persons as $person) {
             try {
-                if ($person->user_id) continue;
+                if ($person->user_id) {
+                    continue;
+                }
 
                 $existingUser = User::where('email', $person->email)->first();
                 if ($existingUser) {
                     $this->errors[] = [
-                        'fila'    => 'post-import',
+                        'fila' => 'post-import',
                         'errores' => [
                             "El email {$person->email} ya está registrado como usuario del sistema.",
-                            "La persona fue creada pero NO se le asignó un usuario."
+                            'La persona fue creada pero NO se le asignó un usuario.',
                         ],
                         'valores' => [$person->dni, $person->email, $person->nombre, $person->apellido],
                     ];
+
                     continue;
                 }
 
                 $user = User::create([
-                    'name'     => $person->nombre . ' ' . $person->apellido,
-                    'email'    => $person->email,
+                    'name' => $person->nombre.' '.$person->apellido,
+                    'email' => $person->email,
                     'password' => Hash::make($person->dni),
-                    'role_id'  => $personaRole->id,
-                    'area_id'  => $person->area_id,
+                    'role_id' => $personaRole->id,
+                    'area_id' => $person->area_id,
                 ]);
                 $person->user_id = $user->id;
                 $person->save();
 
                 // ✅ NUEVO: registrar en pivot para personas nuevas también
                 \DB::table('area_person')->insertOrIgnore([
-                    'person_id'  => $person->id,
-                    'area_id'    => $person->area_id,
+                    'person_id' => $person->id,
+                    'area_id' => $person->area_id,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
 
                 Log::info("✅ Usuario creado para {$person->email}");
             } catch (\Exception $e) {
-                Log::error("❌ Error creando usuario para {$person->email}: " . $e->getMessage());
+                Log::error("❌ Error creando usuario para {$person->email}: ".$e->getMessage());
                 $this->errors[] = [
-                    'fila'    => 'post-import',
+                    'fila' => 'post-import',
                     'errores' => [
-                        "Error al crear usuario: " . $e->getMessage(),
-                        "La persona fue creada pero NO se le asignó un usuario."
+                        'Error al crear usuario: '.$e->getMessage(),
+                        'La persona fue creada pero NO se le asignó un usuario.',
                     ],
                     'valores' => [$person->dni, $person->email, $person->nombre, $person->apellido],
                 ];
@@ -533,18 +581,22 @@ class PersonsImport implements ToCollection, WithHeadingRow
     {
         return $this->importedCount;
     }
+
     public function getErrors()
     {
         return $this->errors;
     }
+
     public function getWarnings()
     {
         return $this->warnings;
     }
+
     public function getWithChanges()
     {
         return $this->withChanges;
     }
+
     public function getTotalRows()
     {
         return $this->processedRows;

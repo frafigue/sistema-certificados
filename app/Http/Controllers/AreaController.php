@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Area;
-use Illuminate\Support\Facades\Blade;
-use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
+use iio\libmergepdf\Merger;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
-use iio\libmergepdf\Merger;
 use Throwable;
 
 class AreaController extends Controller
@@ -20,6 +20,7 @@ class AreaController extends Controller
     // NO se aplica ningún factor de escala en buildHtmlFromDesign.
     // ─────────────────────────────────────────────────────────────────────────
     const PDF_W = 1122;
+
     const PDF_H = 793;
 
     public function index(Request $request)
@@ -35,58 +36,63 @@ class AreaController extends Controller
         }
 
         if ($request->filled('nombre')) {
-            $query->where('nombre', 'like', '%' . $request->nombre . '%');
+            $query->where('nombre', 'like', '%'.$request->nombre.'%');
         }
 
         $areas = $query->paginate(10)->withQueryString();
+
         return view('areas.index', compact('areas'));
     }
 
     public function create()
     {
         $user = Auth::user();
-        if (!$user->can('is-root')) {
+        if (! $user->can('is-root')) {
             abort(403, 'Solo el administrador del sistema puede crear nuevas áreas.');
         }
+
         return view('areas.create');
     }
 
     public function store(Request $request)
     {
         $user = Auth::user();
-        if (!$user->can('is-root')) {
+        if (! $user->can('is-root')) {
             abort(403, 'Solo el administrador del sistema puede crear nuevas áreas.');
         }
         $data = $request->validate([
-            'nombre'      => 'required|string|unique:areas,nombre|max:255',
+            'nombre' => 'required|string|unique:areas,nombre|max:255',
             'descripcion' => 'nullable|string',
         ]);
         Area::create($data);
+
         return redirect()->route('areas.index')->with('success', 'Área creada exitosamente.');
     }
 
     public function show(Area $area)
     {
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403, 'No tienes permisos para ver esta área.');
         }
+
         return view('areas.show', compact('area'));
     }
 
     public function edit(Area $area)
     {
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403, 'No tienes permisos para editar esta área.');
         }
+
         return view('areas.edit', compact('area'));
     }
 
     public function update(Request $request, Area $area)
     {
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403, 'No tienes permisos para actualizar esta área.');
         }
 
@@ -95,7 +101,7 @@ class AreaController extends Controller
         ];
 
         if ($user->can('is-root')) {
-            $validationRules['nombre'] = 'required|string|max:255|unique:areas,nombre,' . $area->id;
+            $validationRules['nombre'] = 'required|string|max:255|unique:areas,nombre,'.$area->id;
         }
 
         $data = $request->validate($validationRules);
@@ -107,7 +113,7 @@ class AreaController extends Controller
     public function destroy(Area $area)
     {
         $user = Auth::user();
-        if (!$user->can('is-root')) {
+        if (! $user->can('is-root')) {
             abort(403, 'Solo el administrador del sistema puede eliminar áreas.');
         }
         if ($area->courses()->count() > 0) {
@@ -115,27 +121,32 @@ class AreaController extends Controller
                 ->with('error', 'No se puede eliminar esta área porque tiene cursos asociados.');
         }
         $area->delete();
+
         return redirect()->route('areas.index')->with('success', 'Área eliminada exitosamente.');
     }
 
     public function designTemplate(Area $area)
     {
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403, 'No tienes permisos para diseñar las plantillas de esta área.');
         }
 
         $designFront = null;
-        $designBack  = null;
+        $designBack = null;
 
         if ($area->template_front) {
             $decoded = $this->extractDesignFromTemplate($area->template_front);
-            if ($decoded) $designFront = $decoded;
+            if ($decoded) {
+                $designFront = $decoded;
+            }
         }
 
         if ($area->template_back) {
             $decoded = $this->extractDesignFromTemplate($area->template_back);
-            if ($decoded) $designBack = $decoded;
+            if ($decoded) {
+                $designBack = $decoded;
+            }
         }
 
         return view('areas.design-visual', compact('area', 'designFront', 'designBack'));
@@ -144,22 +155,22 @@ class AreaController extends Controller
     public function uploadBackground(Request $request, Area $area)
     {
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403);
         }
 
         $request->validate([
             'image' => 'required|image|max:5120',
-            'side'  => 'required|in:front,back',
+            'side' => 'required|in:front,back',
         ]);
 
         $path = $request->file('image')->store(
-            'area-backgrounds/' . $area->id,
+            'area-backgrounds/'.$area->id,
             'public'
         );
 
         return response()->json([
-            'url'  => Storage::disk('public')->url($path),
+            'url' => Storage::disk('public')->url($path),
             'path' => $path,
         ]);
     }
@@ -167,47 +178,47 @@ class AreaController extends Controller
     public function saveTemplate(Request $request, Area $area)
     {
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403, 'No tienes permisos para guardar las plantillas de esta área.');
         }
 
         $request->validate([
             'design_front' => 'required|string',
-            'design_back'  => 'nullable|string', // ← dorso opcional
+            'design_back' => 'nullable|string', // ← dorso opcional
             // Tamaño de papel (nuevos, opcionales)
-            'paper_size'   => 'nullable|in:A4,A5,Oficio,Carta,custom',
-            'orientation'  => 'nullable|in:portrait,landscape',
-            'width_cm'     => 'nullable|numeric|min:1|max:200',
-            'height_cm'    => 'nullable|numeric|min:1|max:200',
+            'paper_size' => 'nullable|in:A4,A5,Oficio,Carta,custom',
+            'orientation' => 'nullable|in:portrait,landscape',
+            'width_cm' => 'nullable|numeric|min:1|max:200',
+            'height_cm' => 'nullable|numeric|min:1|max:200',
         ]);
 
         $designFront = json_decode($request->design_front, true);
         // Si no viene dorso, usar diseño vacío
-        $designBack  = $request->filled('design_back')
+        $designBack = $request->filled('design_back')
             ? json_decode($request->design_back, true)
             : ['background' => '', 'elements' => []];
 
-        if (!$designFront) {
+        if (! $designFront) {
             return back()->withErrors(['design' => 'El diseño del frente no es válido.']);
         }
 
         $designFront = $this->sanitizeDesignBase64($designFront, $area, 'front');
-        $designBack  = $this->sanitizeDesignBase64($designBack,  $area, 'back');
+        $designBack = $this->sanitizeDesignBase64($designBack, $area, 'back');
 
         // ⭐ Usar el Service que convierte imágenes a base64
         $service = app(\App\Services\CertificateService::class);
 
         $templateFront = $service->buildHtmlFromDesign($designFront);
-        $templateBack  = $service->buildHtmlFromDesign($designBack);
+        $templateBack = $service->buildHtmlFromDesign($designBack);
 
         $area->update([
-            'template_front'       => $templateFront,
-            'template_back'        => $templateBack,
+            'template_front' => $templateFront,
+            'template_back' => $templateBack,
             // Tamaño de papel (nuevos)
-            'template_paper_size'  => $request->paper_size  ?? $area->template_paper_size  ?? 'A4',
+            'template_paper_size' => $request->paper_size ?? $area->template_paper_size ?? 'A4',
             'template_orientation' => $request->orientation ?? $area->template_orientation ?? 'landscape',
-            'template_width_cm'    => $request->width_cm    ?? $area->template_width_cm,
-            'template_height_cm'   => $request->height_cm   ?? $area->template_height_cm,
+            'template_width_cm' => $request->width_cm ?? $area->template_width_cm,
+            'template_height_cm' => $request->height_cm ?? $area->template_height_cm,
         ]);
 
         return redirect()->route('areas.design', $area)
@@ -220,40 +231,40 @@ class AreaController extends Controller
         ini_set('memory_limit', '512M');
 
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403);
         }
 
         $request->validate([
             'design_front' => 'required|string',
-            'design_back'  => 'required|string',
+            'design_back' => 'required|string',
         ]);
 
         $designFront = json_decode($request->design_front, true);
-        $designBack  = json_decode($request->design_back,  true);
+        $designBack = json_decode($request->design_back, true);
 
-        if (!$designFront || !$designBack) {
+        if (! $designFront || ! $designBack) {
             return response()->json(['error' => 'Diseño inválido.'], 422);
         }
 
         $designFront = $this->sanitizeDesignBase64($designFront, $area, 'front');
-        $designBack  = $this->sanitizeDesignBase64($designBack,  $area, 'back');
+        $designBack = $this->sanitizeDesignBase64($designBack, $area, 'back');
 
-        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($area, 'livepreview_' . time());
+        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($area, 'livepreview_'.time());
 
         try {
             // ⭐ USAR EL SERVICE QUE SÍ CONVIERTE IMÁGENES A BASE64
             $service = app(\App\Services\CertificateService::class);
 
             $templateFront = $service->buildHtmlFromDesign($designFront);
-            $htmlFront     = Blade::render($templateFront, $data);
+            $htmlFront = Blade::render($templateFront, $data);
             unset($templateFront);
 
             $backEmpty = empty($designBack['elements']) && empty($designBack['background']);
-            $htmlBack  = null;
-            if (!$backEmpty) {
+            $htmlBack = null;
+            if (! $backEmpty) {
                 $templateBack = $service->buildHtmlFromDesign($designBack);
-                $htmlBack     = Blade::render($templateBack, $data);
+                $htmlBack = Blade::render($templateBack, $data);
                 unset($templateBack);
             }
 
@@ -261,10 +272,10 @@ class AreaController extends Controller
 
             return response($finalPdfContent, 200)
                 ->header('Content-Type', 'application/pdf')
-                ->header('Content-Disposition', 'inline; filename="preview_' . $area->nombre . '.pdf"');
+                ->header('Content-Disposition', 'inline; filename="preview_'.$area->nombre.'.pdf"');
 
         } catch (Throwable $e) {
-            return response('Error al generar la preview: ' . $e->getMessage(), 500);
+            return response('Error al generar la preview: '.$e->getMessage(), 500);
         }
     }
 
@@ -274,7 +285,7 @@ class AreaController extends Controller
         ini_set('memory_limit', '512M');
 
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403);
         }
 
@@ -283,20 +294,20 @@ class AreaController extends Controller
         }
 
         $designFront = $this->extractDesignFromTemplate($area->template_front);
-        $designBack  = $this->extractDesignFromTemplate($area->template_back);
+        $designBack = $this->extractDesignFromTemplate($area->template_back);
 
         // ⭐ USAR EL SERVICE QUE SÍ CONVIERTE IMÁGENES A BASE64
         $service = app(\App\Services\CertificateService::class);
 
         if ($designFront && $designBack) {
             $templateFront = $service->buildHtmlFromDesign($designFront);
-            $templateBack  = $service->buildHtmlFromDesign($designBack);
+            $templateBack = $service->buildHtmlFromDesign($designBack);
         } else {
             $templateFront = $area->template_front;
-            $templateBack  = $area->template_back;
+            $templateBack = $area->template_back;
         }
 
-        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($area, 'preview_' . time());
+        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($area, 'preview_'.time());
 
         try {
             $htmlFront = Blade::render($templateFront, $data);
@@ -304,8 +315,8 @@ class AreaController extends Controller
 
             $backEmpty = empty($designBack) ||
                         (empty($designBack['elements']) && empty($designBack['background']));
-            $htmlBack  = null;
-            if (!$backEmpty && !empty($templateBack)) {
+            $htmlBack = null;
+            if (! $backEmpty && ! empty($templateBack)) {
                 $htmlBack = Blade::render($templateBack, $data);
                 unset($templateBack);
             }
@@ -317,20 +328,20 @@ class AreaController extends Controller
                 ->header('Content-Disposition', 'inline; filename="preview.pdf"');
 
         } catch (Throwable $e) {
-            return 'Error al renderizar la plantilla: ' . $e->getMessage();
+            return 'Error al renderizar la plantilla: '.$e->getMessage();
         }
     }
 
     public function clearTemplate(Area $area)
     {
         $user = Auth::user();
-        if (!$this->canAccessArea($user, $area)) {
+        if (! $this->canAccessArea($user, $area)) {
             abort(403);
         }
 
         $area->update([
             'template_front' => null,
-            'template_back'  => null,
+            'template_back' => null,
         ]);
 
         return redirect()->route('areas.design', $area)
@@ -343,7 +354,9 @@ class AreaController extends Controller
 
     private function canAccessArea($user, $area): bool
     {
-        if ($user->can('is-root')) return true;
+        if ($user->can('is-root')) {
+            return true;
+        }
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             return $area->id == $user->area_id;
@@ -355,15 +368,15 @@ class AreaController extends Controller
     private function buildPreviewData(Area $area, string $uniqueCode): array
     {
         $person = new \App\Models\Person([
-            'nombre'   => 'Juan',
+            'nombre' => 'Juan',
             'apellido' => 'Pérez',
-            'dni'      => '12345678',
+            'dni' => '12345678',
         ]);
 
         $course = new \App\Models\Course([
-            'nombre'    => 'Curso de Ejemplo',
-            'horas'     => 40,
-            'objetivo'  => 'Capacitar al personal en el uso de herramientas tecnológicas.',
+            'nombre' => 'Curso de Ejemplo',
+            'horas' => 40,
+            'objetivo' => 'Capacitar al personal en el uso de herramientas tecnológicas.',
             'contenido' => 'Módulo 1: Introducción. Módulo 2: Práctica. Módulo 3: Evaluación.',
         ]);
         $course->area = $area;
@@ -377,22 +390,22 @@ class AreaController extends Controller
         ]));
 
         $certificateData = [
-            'cuv'                 => 'UAAREASUB1' . date('Y') . 'APRJP678',
+            'cuv' => 'UAAREASUB1'.date('Y').'APRJP678',
             'tipo_de_certificado' => 'Aprobado',
-            'tipo_certificado'    => 'APR',
-            'ano'                 => date('Y'),
-            'horas'               => 40,
-            'nota'                => 8,
-            'unidad_academica'    => 'UA',
-            'area'                => 'AREA',
-            'subarea'             => 'SUB',
+            'tipo_certificado' => 'APR',
+            'ano' => date('Y'),
+            'horas' => 40,
+            'nota' => 8,
+            'unidad_academica' => 'UA',
+            'area' => 'AREA',
+            'subarea' => 'SUB',
         ];
 
         $data = [
-            'person'          => $person,
-            'course'          => $course,
+            'person' => $person,
+            'course' => $course,
             'certificateData' => $certificateData,
-            'qr_path'         => public_path('images/logo.png'),
+            'qr_path' => public_path('images/logo.png'),
         ];
 
         $tempPath = storage_path('app/temp_pdf');
@@ -407,15 +420,15 @@ class AreaController extends Controller
         if ($bg && str_starts_with($bg, 'data:image/')) {
             try {
                 preg_match('/^data:(image\/\w+);base64,/', $bg, $matches);
-                $mimeType  = $matches[1] ?? 'image/png';
+                $mimeType = $matches[1] ?? 'image/png';
                 $extension = str_replace('image/', '', $mimeType);
                 $imageData = base64_decode(preg_replace('/^data:image\/\w+;base64,/', '', $bg));
 
-                $filename = 'area-backgrounds/' . $area->id . '/' . $side . '_' . time() . '.' . $extension;
+                $filename = 'area-backgrounds/'.$area->id.'/'.$side.'_'.time().'.'.$extension;
                 Storage::disk('public')->put($filename, $imageData);
 
-                //$design['background'] = Storage::disk('public')->url($filename);
-                $design['background'] = '/storage/' . $filename;
+                // $design['background'] = Storage::disk('public')->url($filename);
+                $design['background'] = '/storage/'.$filename;
                 unset($imageData);
             } catch (Throwable $e) {
                 $design['background'] = '';
@@ -443,8 +456,8 @@ class AreaController extends Controller
      */
     private function buildHtmlFromDesign(array $design): string
     {
-        $bgImage  = $design['background'] ?? '';
-        $elements = $design['elements']   ?? [];
+        $bgImage = $design['background'] ?? '';
+        $elements = $design['elements'] ?? [];
 
         $pdfW = self::PDF_W; // 1122
         $pdfH = self::PDF_H; // 793
@@ -452,8 +465,8 @@ class AreaController extends Controller
         // ── Resolver ruta local del fondo ────────────────────────────────────
         if ($bgImage && str_starts_with($bgImage, 'http')) {
             $storagePublicUrl = Storage::disk('public')->url('');
-            $relativePath     = ltrim(str_replace($storagePublicUrl, '', $bgImage), '/');
-            $localPath        = Storage::disk('public')->path($relativePath);
+            $relativePath = ltrim(str_replace($storagePublicUrl, '', $bgImage), '/');
+            $localPath = Storage::disk('public')->path($relativePath);
 
             if (file_exists($localPath)) {
                 $bgImage = str_replace('\\', '/', $localPath);
@@ -462,7 +475,7 @@ class AreaController extends Controller
 
         $bgStyle = $bgImage
             ? "background-image: url('{$bgImage}'); background-size: cover; background-position: center; background-repeat: no-repeat;"
-            : "background-color: #ffffff;";
+            : 'background-color: #ffffff;';
 
         $elementsHtml = '';
 
@@ -470,9 +483,9 @@ class AreaController extends Controller
             $type = $el['type'] ?? '';
 
             // ── Coordenadas directas, sin escala ────────────────────────────
-            $x = (int) round($el['x']      ?? 0);
-            $y = (int) round($el['y']      ?? 0);
-            $w = (int) round($el['width']  ?? 200);
+            $x = (int) round($el['x'] ?? 0);
+            $y = (int) round($el['y'] ?? 0);
+            $w = (int) round($el['width'] ?? 200);
             $h = (int) round($el['height'] ?? 40);
 
             // ── Fuente directa, sin escala ───────────────────────────────────
@@ -483,72 +496,72 @@ class AreaController extends Controller
             switch ($type) {
 
                 case 'nombre':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? true)  ? 'font-weight:bold;'  : '';
+                    $color = $el['color'] ?? '#000000';
+                    $bold = ($el['bold'] ?? true) ? 'font-weight:bold;' : '';
                     $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'center';
+                    $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">"
-                        . "{{ \$person->nombre }} {{ \$person->apellido }}"
-                        . "</div>";
+                        .'{{ $person->nombre }} {{ $person->apellido }}'
+                        .'</div>';
                     break;
 
                 case 'curso':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
+                    $color = $el['color'] ?? '#000000';
+                    $bold = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
                     $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'center';
+                    $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">"
-                        . "{{ \$course->nombre }}"
-                        . "</div>";
+                        .'{{ $course->nombre }}'
+                        .'</div>';
                     break;
 
                 case 'fecha':
                     $color = $el['color'] ?? '#000000';
                     $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">"
-                        . "{{ date('d/m/Y') }}"
-                        . "</div>";
+                        ."{{ date('d/m/Y') }}"
+                        .'</div>';
                     break;
 
                 case 'anio':
                     $color = $el['color'] ?? '#000000';
                     $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">"
-                        . "{{ \$certificateData['ano'] ?? date('Y') }}"
-                        . "</div>";
+                        ."{{ \$certificateData['ano'] ?? date('Y') }}"
+                        .'</div>';
                     break;
 
                 case 'condicion':
                     $color = $el['color'] ?? '#000000';
-                    $bold  = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
+                    $bold = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
                     $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold} text-align:{$align}; overflow:hidden;\">"
-                        . "{{ \$certificateData['tipo_de_certificado'] ?? '' }}"
-                        . "</div>";
+                        ."{{ \$certificateData['tipo_de_certificado'] ?? '' }}"
+                        .'</div>';
                     break;
 
                 case 'area':
                     $color = $el['color'] ?? '#000000';
                     $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">"
-                        . "{{ \$course->area->nombre ?? '' }}"
-                        . "</div>";
+                        ."{{ \$course->area->nombre ?? '' }}"
+                        .'</div>';
                     break;
 
                 case 'horas':
                     $color = $el['color'] ?? '#000000';
                     $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">"
-                        . "{{ \$course->horas ?? '' }} horas"
-                        . "</div>";
+                        ."{{ \$course->horas ?? '' }} horas"
+                        .'</div>';
                     break;
 
                 case 'cuv':
                     $color = $el['color'] ?? '#666666';
                     $align = $el['align'] ?? 'center';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; text-align:{$align}; overflow:hidden;\">"
-                        . "CUV: {{ \$certificateData['cuv'] ?? '' }}"
-                        . "</div>";
+                        ."CUV: {{ \$certificateData['cuv'] ?? '' }}"
+                        .'</div>';
                     break;
 
                 case 'qr':
@@ -556,62 +569,62 @@ class AreaController extends Controller
                     break;
 
                 case 'objetivo':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
+                    $color = $el['color'] ?? '#000000';
+                    $bold = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
                     $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'left';
+                    $align = $el['align'] ?? 'left';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden; word-wrap:break-word;\">"
-                        . "<strong>Objetivo:</strong> {{ \$course->objetivo ?? '' }}"
-                        . "</div>";
+                        ."<strong>Objetivo:</strong> {{ \$course->objetivo ?? '' }}"
+                        .'</div>';
                     break;
 
                 case 'contenido':
-                    $color  = $el['color']  ?? '#000000';
-                    $bold   = ($el['bold']   ?? false) ? 'font-weight:bold;'  : '';
+                    $color = $el['color'] ?? '#000000';
+                    $bold = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
                     $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
-                    $align  = $el['align']  ?? 'left';
+                    $align = $el['align'] ?? 'left';
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden; word-wrap:break-word;\">"
-                        . "<strong>Contenido:</strong> {{ \$course->contenido ?? '' }}"
-                        . "</div>";
+                        ."<strong>Contenido:</strong> {{ \$course->contenido ?? '' }}"
+                        .'</div>';
                     break;
 
                 case 'firma_responsable':
-                    $index  = (int)($el['firma_index'] ?? 0);
-                    $color  = $el['color'] ?? '#000000';
-                    $align  = $el['align'] ?? 'center';
+                    $index = (int) ($el['firma_index'] ?? 0);
+                    $color = $el['color'] ?? '#000000';
+                    $align = $el['align'] ?? 'center';
                     // Altura de imagen de firma: 55% del alto del bloque
-                    $imgH   = (int) round($h * 0.55);
+                    $imgH = (int) round($h * 0.55);
                     $fontSizeNombre = $fontSize;
-                    $fontSizeCargo  = max(9, $fontSize - 2);
+                    $fontSizeCargo = max(9, $fontSize - 2);
 
                     $elementsHtml .= "@php \$_resp = \$course->responsables->get({$index}); @endphp"
-                        . "@if(\$_resp)"
-                        . "<div style=\"{$style} text-align:{$align};\">"
-                        . "@if(\$_resp->signature_path)"
-                        . "<img src=\"{{ storage_path('app/public/' . \$_resp->signature_path) }}\" "
-                        . "style=\"width:100%; height:{$imgH}px; object-fit:contain; display:block;\">"
-                        . "@else"
-                        . "<div style=\"width:100%; height:{$imgH}px; border-bottom:1px solid {$color}; display:block;\"></div>"
-                        . "@endif"
-                        . "<div style=\"font-size:{$fontSizeNombre}px; color:{$color}; font-weight:bold; line-height:1.4; text-align:{$align};\">"
-                        . "{{ \$_resp->nombre }}"
-                        . "</div>"
-                        . "<div style=\"font-size:{$fontSizeCargo}px; color:{$color}; line-height:1.3; text-align:{$align};\">"
-                        . "{{ \$_resp->cargo ?? '' }}"
-                        . "</div>"
-                        . "</div>"
-                        . "@endif";
+                        .'@if($_resp)'
+                        ."<div style=\"{$style} text-align:{$align};\">"
+                        .'@if($_resp->signature_path)'
+                        ."<img src=\"{{ storage_path('app/public/' . \$_resp->signature_path) }}\" "
+                        ."style=\"width:100%; height:{$imgH}px; object-fit:contain; display:block;\">"
+                        .'@else'
+                        ."<div style=\"width:100%; height:{$imgH}px; border-bottom:1px solid {$color}; display:block;\"></div>"
+                        .'@endif'
+                        ."<div style=\"font-size:{$fontSizeNombre}px; color:{$color}; font-weight:bold; line-height:1.4; text-align:{$align};\">"
+                        .'{{ $_resp->nombre }}'
+                        .'</div>'
+                        ."<div style=\"font-size:{$fontSizeCargo}px; color:{$color}; line-height:1.3; text-align:{$align};\">"
+                        ."{{ \$_resp->cargo ?? '' }}"
+                        .'</div>'
+                        .'</div>'
+                        .'@endif';
                     break;
 
                 case 'texto':
-                    $color   = $el['color']   ?? '#000000';
-                    $bold    = ($el['bold']    ?? false) ? 'font-weight:bold;'  : '';
-                    $italic  = ($el['italic']  ?? false) ? 'font-style:italic;' : '';
-                    $align   = $el['align']   ?? 'left';
+                    $color = $el['color'] ?? '#000000';
+                    $bold = ($el['bold'] ?? false) ? 'font-weight:bold;' : '';
+                    $italic = ($el['italic'] ?? false) ? 'font-style:italic;' : '';
+                    $align = $el['align'] ?? 'left';
                     $content = htmlspecialchars($el['content'] ?? 'Texto libre');
                     $elementsHtml .= "<div style=\"{$style} font-size:{$fontSize}px; color:{$color}; {$bold}{$italic} text-align:{$align}; overflow:hidden;\">"
-                        . $content
-                        . "</div>";
+                        .$content
+                        .'</div>';
                     break;
 
                 case 'imagen':
@@ -619,8 +632,8 @@ class AreaController extends Controller
                     if ($src) {
                         if (str_starts_with($src, 'http')) {
                             $storagePublicUrl = Storage::disk('public')->url('');
-                            $relativePath     = ltrim(str_replace($storagePublicUrl, '', $src), '/');
-                            $localPath        = Storage::disk('public')->path($relativePath);
+                            $relativePath = ltrim(str_replace($storagePublicUrl, '', $src), '/');
+                            $localPath = Storage::disk('public')->path($relativePath);
                             $src = file_exists($localPath)
                                 ? str_replace('\\', '/', $localPath)
                                 : $src;
@@ -669,15 +682,17 @@ HTML;
     {
         if (preg_match('/<!-- DESIGN_JSON:(.*?):END_DESIGN_JSON -->/s', $html, $matches)) {
             $json = html_entity_decode($matches[1], ENT_QUOTES);
+
             return json_decode($json, true);
         }
+
         return null;
     }
 
     private function generateCertificatePdf(string $htmlFront, ?string $htmlBack, string $tempPath, string $uniqueCode): string
     {
         File::ensureDirectoryExists($tempPath);
-        $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
+        $frontFilePath = $tempPath.'/'.$uniqueCode.'_front.pdf';
 
         Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape')->save($frontFilePath);
         unset($htmlFront);
@@ -686,10 +701,11 @@ HTML;
         if (empty($htmlBack)) {
             $content = File::get($frontFilePath);
             File::delete($frontFilePath);
+
             return $content;
         }
 
-        $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
+        $backFilePath = $tempPath.'/'.$uniqueCode.'_back.pdf';
         Pdf::loadHTML($htmlBack)->setPaper('a4', 'landscape')->save($backFilePath);
         unset($htmlBack);
 
@@ -699,6 +715,7 @@ HTML;
         $finalPdfContent = $merger->merge();
 
         File::delete($frontFilePath, $backFilePath);
+
         return $finalPdfContent;
     }
 }

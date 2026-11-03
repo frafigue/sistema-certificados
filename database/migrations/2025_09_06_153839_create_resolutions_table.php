@@ -9,19 +9,19 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-public function up(): void
-{
-    Schema::create('resolutions', function (Blueprint $table) {
-        $table->id();
-        $table->string('numero');
-        $table->year('anio');
-        $table->string('area');
-        $table->string('pdf_path');
-        $table->softDeletes();
-        $table->timestamps();
+    public function up(): void
+    {
+        Schema::create('resolutions', function (Blueprint $table) {
+            $table->id();
+            $table->string('numero');
+            $table->year('anio');
+            $table->string('area');
+            $table->string('pdf_path');
+            $table->softDeletes();
+            $table->timestamps();
 
-    });
-}
+        });
+    }
 
     /**
      * Reverse the migrations.

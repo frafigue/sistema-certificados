@@ -1,22 +1,22 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\HomeController;
 use App\Http\Controllers\AreaController;
-use App\Http\Controllers\ResolutionController;
-use App\Http\Controllers\CourseController;
-use App\Http\Controllers\PersonController;
 use App\Http\Controllers\CertificateController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\PersonaDashboardController;
-use App\Http\Controllers\PersonProfileController;
-use App\Http\Controllers\ConsultaPublicaController;
-use App\Http\Controllers\UnifiedImportController;
 use App\Http\Controllers\CertificateExcelGeneratorController;
+use App\Http\Controllers\ConsultaPublicaController;
+use App\Http\Controllers\CourseController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ImportHistoryController;
+use App\Http\Controllers\PersonaDashboardController;
+use App\Http\Controllers\PersonController;
+use App\Http\Controllers\PersonProfileController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ResolutionController;
 use App\Http\Controllers\SubareaController;
 use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\UnifiedImportController;
+use App\Http\Controllers\UserController;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -186,7 +186,7 @@ Route::middleware('auth')->group(function () {
     */
 
     Route::get('my-certificates', [CertificateController::class, 'myCertificates'])->name('certificates.my');
-    //Route::get('certificates/{certificate}/download', [CertificateController::class, 'downloadPdf'])->name('certificates.download');
+    // Route::get('certificates/{certificate}/download', [CertificateController::class, 'downloadPdf'])->name('certificates.download');
 
     Route::get('certificates/import/template', [CertificateController::class, 'downloadTemplate'])->name('certificates.template.download');
     Route::get('certificates/import', [CertificateController::class, 'showImportForm'])->name('certificates.import.form');
@@ -215,4 +215,4 @@ Route::middleware('auth')->group(function () {
     });
 });
 
-require __DIR__ . '/auth.php';
+require __DIR__.'/auth.php';

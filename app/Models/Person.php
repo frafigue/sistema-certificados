@@ -5,8 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Models\User;
-use App\Models\Certificate;
 
 class Person extends Model
 {
@@ -52,7 +50,8 @@ class Person extends Model
     {
         return $this->belongsToMany(\App\Models\Area::class, 'area_person');
     }
-        /**
+
+    /**
      * Subárea a la que pertenece esta persona (nullable)
      */
     public function subarea()

@@ -8,28 +8,28 @@ use App\Models\Course;
 use App\Models\Person;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
-use Illuminate\Support\Facades\Bus;
-use Illuminate\Bus\Batch;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class CertificateExcelGeneratorController extends Controller
 {
     public function batchStatus($id)
     {
         $batch = Bus::findBatch($id);
-        if (!$batch) {
+        if (! $batch) {
             return response()->json([
                 'success' => false,
-                'message' => 'Batch no encontrado'
+                'message' => 'Batch no encontrado',
             ], 404);
         }
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -44,7 +44,7 @@ class CertificateExcelGeneratorController extends Controller
                 'cancelled' => $batch->cancelled(),
                 'created_at' => $batch->createdAt,
                 'finished_at' => $batch->finishedAt,
-            ]
+            ],
         ]);
     }
 
@@ -67,15 +67,15 @@ class CertificateExcelGeneratorController extends Controller
     public function generate(Request $request)
     {
         $request->validate([
-            'course_id'        => 'required|exists:courses,id',
+            'course_id' => 'required|exists:courses,id',
             'unidad_academica' => 'required|string|max:150',
-            'area_siglas'      => 'required|string|max:150',
-            'subarea'          => 'required|string|max:150',
-            'ano'              => 'required|digits:4',
+            'area_siglas' => 'required|string|max:150',
+            'subarea' => 'required|string|max:150',
+            'ano' => 'required|digits:4',
             'tipo_certificado' => 'required|string|regex:/^[\pL\s\-]+$/u',
         ]);
 
-        $user   = Auth::user();
+        $user = Auth::user();
         $course = Course::with('area')->findOrFail($request->course_id);
 
         if ($user->role?->name !== 'Root' && $course->area_id != $user->area_id) {
@@ -83,8 +83,8 @@ class CertificateExcelGeneratorController extends Controller
         }
 
         $persons = Person::whereHas('areas', function ($q) use ($course) {
-                $q->where('areas.id', $course->area_id);
-            })
+            $q->where('areas.id', $course->area_id);
+        })
             ->orderBy('apellido')
             ->orderBy('nombre')
             ->get();
@@ -93,7 +93,7 @@ class CertificateExcelGeneratorController extends Controller
             ->pluck('person_id')
             ->toArray();
 
-        $totalArea   = $persons->count();
+        $totalArea = $persons->count();
         $yaGenerados = count($personasConCertificado);
 
         try {
@@ -109,23 +109,25 @@ class CertificateExcelGeneratorController extends Controller
                 $totalArea
             );
 
-            $fileName = 'certificados_' . Str::slug($course->nombre) . '_' . $request->ano . '.xlsx';
+            $fileName = 'certificados_'.Str::slug($course->nombre).'_'.$request->ano.'.xlsx';
 
             return response()->download($filePath, $fileName)->deleteFileAfterSend(true);
 
         } catch (\Exception $e) {
-            Log::error('[CertificateGenerator] Error generate: ' . $e->getMessage());
+            Log::error('[CertificateGenerator] Error generate: '.$e->getMessage());
             Log::error($e->getTraceAsString());
-            return back()->with('error', 'Error al generar el Excel: ' . $e->getMessage());
+
+            return back()->with('error', 'Error al generar el Excel: '.$e->getMessage());
         }
     }
 
     public function getCourseInfo(Course $course)
     {
         $course->load('area');
+
         return response()->json([
             'area_nombre' => $course->area->nombre ?? '',
-            'area_id'     => $course->area_id,
+            'area_id' => $course->area_id,
         ]);
     }
 
@@ -138,18 +140,18 @@ class CertificateExcelGeneratorController extends Controller
         ]);
 
         try {
-            $importer = new CertificatesSheetImport();
+            $importer = new CertificatesSheetImport;
 
             Excel::import($importer, $request->file('excel_file'));
 
-            $errors         = $importer->getErrors();
+            $errors = $importer->getErrors();
             $generatedCount = $importer->getImportedCount();
-            $batchId        = $importer->getBatchId(); // 🔥 CLAVE
+            $batchId = $importer->getBatchId(); // 🔥 CLAVE
 
             $summary = [
                 'certificados' => [
                     'enviados_a_cola' => $generatedCount,
-                    'errores'         => count($errors),
+                    'errores' => count($errors),
                 ],
             ];
 
@@ -160,10 +162,10 @@ class CertificateExcelGeneratorController extends Controller
                 ->with('batch_id', $batchId); // 🔥 CLAVE
 
         } catch (\Exception $e) {
-            Log::error('[CertificateGenerator] Error crítico import: ' . $e->getMessage());
+            Log::error('[CertificateGenerator] Error crítico import: '.$e->getMessage());
 
             return redirect()->route('certificate-generator.form')
-                ->with('error', 'Error al procesar el archivo: ' . $e->getMessage());
+                ->with('error', 'Error al procesar el archivo: '.$e->getMessage());
         }
     }
 
@@ -182,7 +184,7 @@ class CertificateExcelGeneratorController extends Controller
         int $yaGenerados = 0,
         int $totalArea = 0
     ): string {
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
 
         $headers = [
@@ -200,9 +202,9 @@ class CertificateExcelGeneratorController extends Controller
         $areaNombreCompleto = strtoupper(trim($course->area->nombre ?? $areaSiglasInput));
 
         // 🔥 SIGLAS CORRECTAS
-        $uaSiglas   = $this->getSiglas($unidadAcademica);
+        $uaSiglas = $this->getSiglas($unidadAcademica);
         $areaSiglas = $this->getSiglas($areaNombreCompleto);
-        $subSiglas  = $this->getSiglas($subarea);
+        $subSiglas = $this->getSiglas($subarea);
         $tipoSiglas = $this->getTipoSiglas($tipoCertificado);
 
         $anioCorto = substr($ano, -2);
@@ -210,19 +212,19 @@ class CertificateExcelGeneratorController extends Controller
         $row = 2;
         foreach ($persons as $person) {
 
-            $dni         = $person->dni;
-            $iniciales   = $this->getIniciales($person->apellido, $person->nombre);
+            $dni = $person->dni;
+            $iniciales = $this->getIniciales($person->apellido, $person->nombre);
             $tresUltimos = substr($dni, -3);
-            $codigoInc   = $person->id;
+            $codigoInc = $person->id;
 
             $cuv =
-                $uaSiglas .
-                $areaSiglas .
-                $subSiglas .
-                $codigoInc .
-                $anioCorto .
-                $tipoSiglas .
-                $iniciales .
+                $uaSiglas.
+                $areaSiglas.
+                $subSiglas.
+                $codigoInc.
+                $anioCorto.
+                $tipoSiglas.
+                $iniciales.
                 $tresUltimos;
 
             $rowData = [
@@ -247,7 +249,7 @@ class CertificateExcelGeneratorController extends Controller
             $row++;
         }
 
-        $filePath = storage_path('app/temp_excel/certificados_' . time() . '.xlsx');
+        $filePath = storage_path('app/temp_excel/certificados_'.time().'.xlsx');
         (new Xlsx($spreadsheet))->save($filePath);
 
         return $filePath;
@@ -272,7 +274,7 @@ class CertificateExcelGeneratorController extends Controller
         $siglas = '';
 
         foreach ($palabras as $palabra) {
-            if (!in_array($palabra, $ignorar)) {
+            if (! in_array($palabra, $ignorar)) {
                 $siglas .= substr($palabra, 0, 1);
             }
         }
@@ -287,17 +289,17 @@ class CertificateExcelGeneratorController extends Controller
 
     private function getIniciales(string $apellido, string $nombre): string
     {
-        return strtoupper(mb_substr(trim($apellido), 0, 1)) .
+        return strtoupper(mb_substr(trim($apellido), 0, 1)).
                strtoupper(mb_substr(trim($nombre), 0, 1));
     }
 
     private function applyHeaderStyle($sheet, string $range): void
     {
         $sheet->getStyle($range)->applyFromArray([
-            'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
-            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF70AD47']],
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF70AD47']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
         ]);
     }
 }

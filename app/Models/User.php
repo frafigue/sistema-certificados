@@ -5,8 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use App\Models\Role;
-use App\Models\Person;
 
 class User extends Authenticatable
 {
@@ -31,8 +29,8 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
-            'activo'            => 'boolean', // ✅ NUEVO
+            'password' => 'hashed',
+            'activo' => 'boolean', // ✅ NUEVO
         ];
     }
 
@@ -56,7 +54,8 @@ class User extends Authenticatable
     {
         return $this->activo === true;
     }
-        /**
+
+    /**
      * Subárea asignada (para gestores)
      */
     public function subarea()
@@ -79,6 +78,7 @@ class User extends Authenticatable
     {
         return $this->hasMany(Subarea::class, 'created_by');
     }
+
     /**
      * Plantillas creadas por este usuario
      */

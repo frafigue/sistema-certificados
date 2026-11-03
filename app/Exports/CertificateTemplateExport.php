@@ -15,9 +15,6 @@ class CertificateTemplateExport implements FromCollection, WithHeadings
         return collect([]);
     }
 
-    /**
-     * @return array
-     */
     // app/Exports/CertificateTemplateExport.php
 
     public function headings(): array
@@ -36,7 +33,7 @@ class CertificateTemplateExport implements FromCollection, WithHeadings
             'tipo_certificado',
             'iniciales',
             'dni_3',
-            'cuv'
+            'cuv',
         ];
     }
 }
