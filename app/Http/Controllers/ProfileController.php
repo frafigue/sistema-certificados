@@ -20,9 +20,10 @@ class ProfileController extends Controller
 
         if ($user->role && $user->role->name === 'Persona') {
             $person = $user->person;
-            if (!$person) {
+            if (! $person) {
                 abort(404, 'Perfil de persona no encontrado.');
             }
+
             return view('persona.profile', ['person' => $person]);
         }
 

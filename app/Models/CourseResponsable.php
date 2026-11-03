@@ -14,7 +14,7 @@ class CourseResponsable extends Model
         'nombre',
         'cargo',
         'signature_path',
-        'orden'
+        'orden',
     ];
 
     /**

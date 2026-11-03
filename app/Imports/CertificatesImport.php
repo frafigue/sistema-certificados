@@ -2,24 +2,25 @@
 
 namespace App\Imports;
 
+use App\Mail\CertificateSent;
 use App\Models\Certificate;
 use App\Models\Course;
 use App\Models\Person;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Concerns\ToCollection;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithCalculatedFormulas;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Throwable;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\CertificateSent;
-use Illuminate\Support\Facades\Blade;
 
-class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculatedFormulas
+class CertificatesImport implements ToCollection, WithCalculatedFormulas, WithHeadingRow
 {
     private $errors = [];
+
     private $importedCount = 0;
 
     public function collection(Collection $rows)
@@ -42,13 +43,17 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                 $cuv = $cleanedRow['cuv'] ?? null;
                 $dni = $cleanedRow['dni'] ?? null;
 
-                if (!$cursoNombre || !$cuv || !$dni) continue;
+                if (! $cursoNombre || ! $cuv || ! $dni) {
+                    continue;
+                }
 
                 $course = Course::with(['area'])
                     ->where('nombre', trim($cursoNombre))
                     ->first();
 
-                if (!$course) continue;
+                if (! $course) {
+                    continue;
+                }
 
                 // 🔹 CONDITION
                 $map = [
@@ -61,7 +66,9 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                 $condition = $map[$tipo] ?? 'Asistente';
 
                 // 🔹 CUV
-                if (Certificate::where('unique_code', $cuv)->exists()) continue;
+                if (Certificate::where('unique_code', $cuv)->exists()) {
+                    continue;
+                }
 
                 // 🔹 PERSONA
                 $person = Person::firstOrCreate(
@@ -69,17 +76,17 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                     [
                         'apellido' => $cleanedRow['apellido'] ?? 'N/A',
                         'nombre' => $cleanedRow['nombre'] ?? 'N/A',
-                        'email' => $dni . '@tmp.com'
+                        'email' => $dni.'@tmp.com',
                     ]
                 );
 
                 // 🔹 QR
-                $qrPath = 'qrcodes/' . $cuv . '.svg';
+                $qrPath = 'qrcodes/'.$cuv.'.svg';
 
                 QrCode::format('svg')
                     ->size(100) // 🔥 más chico
                     ->generate(route('certificates.verify', $cuv),
-                        storage_path('app/public/' . $qrPath)
+                        storage_path('app/public/'.$qrPath)
                     );
 
                 // 🔥 TEMPLATE ÚNICO (SIN BACK PDF SEPARADO)
@@ -88,7 +95,7 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                     'course' => $course,
                     'certificateData' => $cleanedRow,
                     'condition' => $condition,
-                    'qr_path' => storage_path('app/public/' . $qrPath),
+                    'qr_path' => storage_path('app/public/'.$qrPath),
                 ];
 
                 $html = Blade::render($course->area->template_front, $data);
@@ -103,7 +110,7 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                         'isHtml5ParserEnabled' => false,
                     ]);
 
-                $pdfPath = 'certificates/' . $cuv . '.pdf';
+                $pdfPath = 'certificates/'.$cuv.'.pdf';
 
                 Storage::disk('public')->put($pdfPath, $pdf->output());
 
@@ -123,14 +130,14 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                 ]);
 
                 // 🔹 EMAIL
-                if ($person->email && !str_ends_with($person->email, '@tmp.com')) {
+                if ($person->email && ! str_ends_with($person->email, '@tmp.com')) {
                     Mail::to($person->email)->queue(new CertificateSent($certificate));
                 }
 
                 $this->importedCount++;
 
             } catch (Throwable $e) {
-                $this->errors[] = "Fila " . ($rowIndex + 2) . ": " . $e->getMessage();
+                $this->errors[] = 'Fila '.($rowIndex + 2).': '.$e->getMessage();
             }
         }
     }

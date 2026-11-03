@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -16,7 +14,7 @@ return new class extends Migration
             ->whereNotNull('capacitador_nombre')
             ->orWhereNotNull('coordinador_nombre')
             ->get();
-        
+
         foreach ($courses as $course) {
             // Migrar Capacitador (Firma 1)
             if ($course->capacitador_nombre) {
@@ -30,7 +28,7 @@ return new class extends Migration
                     'updated_at' => now(),
                 ]);
             }
-            
+
             // Migrar Coordinador (Firma 2)
             if ($course->coordinador_nombre) {
                 DB::table('course_responsables')->insert([

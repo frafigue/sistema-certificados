@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('certificates', function (Blueprint $table) {
             $table->string('unidad_academica')->nullable()->after('nota');
-            $table->string('area_excel')->nullable()->after('unidad_academica'); 
+            $table->string('area_excel')->nullable()->after('unidad_academica');
             $table->string('subarea')->nullable()->after('area_excel');
         });
     }

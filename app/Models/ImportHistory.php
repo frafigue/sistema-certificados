@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Models\Certificate;
-
 
 class ImportHistory extends Model
 {
@@ -28,7 +26,7 @@ class ImportHistory extends Model
     ];
 
     protected $casts = [
-        'started_at'  => 'datetime',
+        'started_at' => 'datetime',
         'finished_at' => 'datetime',
     ];
 
@@ -67,6 +65,7 @@ class ImportHistory extends Model
             ($this->processed_rows / $this->total_rows) * 100
         );
     }
+
     public function certificates(): HasMany
     {
         return $this->hasMany(Certificate::class);

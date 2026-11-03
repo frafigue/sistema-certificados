@@ -9,10 +9,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class UnifiedImportController extends Controller
 {
@@ -30,31 +30,31 @@ class UnifiedImportController extends Controller
         ]);
 
         try {
-            $import = new UnifiedImport();
+            $import = new UnifiedImport;
             Excel::import($import, $request->file('excel_file'));
 
             $import->forceFinalFlush();
             $import->onImportCompleted();
 
-            $personsErrors  = $import->getPersonsErrors();
-            $certsErrors    = $import->getCertificatesErrors();
-            $allErrors      = array_merge($personsErrors, $certsErrors);
+            $personsErrors = $import->getPersonsErrors();
+            $certsErrors = $import->getCertificatesErrors();
+            $allErrors = array_merge($personsErrors, $certsErrors);
 
             $summary = [
                 'personas' => [
-                    'creadas'    => $import->getPersonsImportedCount(),
+                    'creadas' => $import->getPersonsImportedCount(),
                     'existentes' => $import->getPersonsSkippedCount(),
-                    'errores'    => count($personsErrors),
+                    'errores' => count($personsErrors),
                 ],
                 'certificados' => [
                     'generados' => $import->getCertificatesImportedCount(),
-                    'errores'   => count($certsErrors),
+                    'errores' => count($certsErrors),
                 ],
             ];
 
             Log::info('[UnifiedImport] Proceso finalizado.', $summary);
 
-            if (!empty($allErrors)) {
+            if (! empty($allErrors)) {
                 return redirect()->route('unified-import.form')
                     ->with('import_summary', $summary)
                     ->with('import_errors', $allErrors)
@@ -69,21 +69,23 @@ class UnifiedImportController extends Controller
             $errors = [];
             foreach ($e->failures() as $failure) {
                 $errors[] = [
-                    'hoja'    => 'Excel',
-                    'fila'    => $failure->row(),
+                    'hoja' => 'Excel',
+                    'fila' => $failure->row(),
                     'errores' => $failure->errors(),
                     'valores' => array_slice($failure->values(), 0, 4),
                 ];
             }
+
             return redirect()->route('unified-import.form')
                 ->with('import_errors', $errors)
                 ->with('error', 'Se encontraron errores de validación en el archivo.');
 
         } catch (\Exception $e) {
-            Log::error('[UnifiedImport] Error crítico: ' . $e->getMessage());
+            Log::error('[UnifiedImport] Error crítico: '.$e->getMessage());
             Log::error($e->getTraceAsString());
+
             return redirect()->route('unified-import.form')
-                ->with('error', 'Error al procesar el archivo: ' . $e->getMessage());
+                ->with('error', 'Error al procesar el archivo: '.$e->getMessage());
         }
     }
 
@@ -91,7 +93,7 @@ class UnifiedImportController extends Controller
     {
         $filePath = storage_path('app/templates/plantilla_unificada.xlsx');
 
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             $this->generateTemplate($filePath);
         }
 
@@ -100,27 +102,27 @@ class UnifiedImportController extends Controller
 
     private function generateTemplate(string $filePath): void
     {
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
 
         // ── HOJA 1: PERSONAS ────────────────────────────────────────────────
         $sh1 = $spreadsheet->getActiveSheet();
         $sh1->setTitle('Personas');
 
-        $headersP = ['dni','apellido','nombre','titulo','domicilio','telefono','email','areaasignada'];
+        $headersP = ['dni', 'apellido', 'nombre', 'titulo', 'domicilio', 'telefono', 'email', 'areaasignada'];
         foreach ($headersP as $i => $h) {
             $sh1->setCellValueByColumnAndRow($i + 1, 1, $h);
         }
 
-        $user  = Auth::user();
+        $user = Auth::user();
         $query = Area::query();
         if ($user->role?->name === 'Administrador' && $user->area_id) {
             $query->where('id', $user->area_id);
         }
-        $areas       = $query->get();
+        $areas = $query->get();
         $exampleArea = $areas->first();
         $areasString = $areas->pluck('nombre')->implode(', ');
 
-        $exampleP = ['28456123','García','Juan','Ing.','Av. San Martín 123','3884111222','juan@mail.com', $exampleArea?->nombre ?? 'Nombre del Área'];
+        $exampleP = ['28456123', 'García', 'Juan', 'Ing.', 'Av. San Martín 123', '3884111222', 'juan@mail.com', $exampleArea?->nombre ?? 'Nombre del Área'];
         foreach ($exampleP as $i => $v) {
             $sh1->setCellValueByColumnAndRow($i + 1, 2, $v);
         }
@@ -129,21 +131,23 @@ class UnifiedImportController extends Controller
         $sh1->setCellValue('A4', '(*) Obligatorios: dni, apellido, nombre, email, areaasignada');
         $sh1->mergeCells('A4:H4');
         $sh1->getStyle('A4')->getFont()->setItalic(true)->setSize(9)->getColor()->setARGB('FF595959');
-        $sh1->setCellValue('A5', 'Áreas disponibles: ' . $areasString);
+        $sh1->setCellValue('A5', 'Áreas disponibles: '.$areasString);
         $sh1->mergeCells('A5:H5');
         $sh1->getStyle('A5')->getFont()->setSize(9)->setBold(true)->getColor()->setARGB('FF006400');
-        foreach (range('A', 'H') as $col) { $sh1->getColumnDimension($col)->setAutoSize(true); }
+        foreach (range('A', 'H') as $col) {
+            $sh1->getColumnDimension($col)->setAutoSize(true);
+        }
 
         // ── HOJA 2: CERTIFICADOS ─────────────────────────────────────────────
         $sh2 = $spreadsheet->createSheet();
         $sh2->setTitle('Certificados');
 
-        $headersC = ['dni','curso','nota','unidad_academica','area','subarea','codigo_incremental','ano','tipo_certificado','iniciales','3_ultimos_del_dni','cuv'];
+        $headersC = ['dni', 'curso', 'nota', 'unidad_academica', 'area', 'subarea', 'codigo_incremental', 'ano', 'tipo_certificado', 'iniciales', '3_ultimos_del_dni', 'cuv'];
         foreach ($headersC as $i => $h) {
             $sh2->setCellValueByColumnAndRow($i + 1, 1, $h);
         }
 
-        $exampleC = ['28456123','Nombre Exacto del Curso','8','SS','SAL','PAB','45',date('Y'),'APR','GJ','123','(vacío = generación automática)'];
+        $exampleC = ['28456123', 'Nombre Exacto del Curso', '8', 'SS', 'SAL', 'PAB', '45', date('Y'), 'APR', 'GJ', '123', '(vacío = generación automática)'];
         foreach ($exampleC as $i => $v) {
             $sh2->setCellValueByColumnAndRow($i + 1, 2, $v);
         }
@@ -161,23 +165,25 @@ class UnifiedImportController extends Controller
         $sh2->setCellValue('A7', 'IMPORTANTE: El DNI debe coincidir con un DNI de la Hoja "Personas" o con una persona ya existente en el sistema.');
         $sh2->mergeCells('A7:L7');
         $sh2->getStyle('A7')->getFont()->setSize(9)->setBold(true)->getColor()->setARGB('FFCC0000');
-        foreach (range('A', 'L') as $col) { $sh2->getColumnDimension($col)->setAutoSize(true); }
+        foreach (range('A', 'L') as $col) {
+            $sh2->getColumnDimension($col)->setAutoSize(true);
+        }
 
-        if (!file_exists(dirname($filePath))) {
+        if (! file_exists(dirname($filePath))) {
             mkdir(dirname($filePath), 0755, true);
         }
 
         (new Xlsx($spreadsheet))->save($filePath);
-        Log::info('[UnifiedImport] Plantilla generada: ' . $filePath);
+        Log::info('[UnifiedImport] Plantilla generada: '.$filePath);
     }
 
     private function applyHeaderStyle($sheet, string $range, string $color): void
     {
         $sheet->getStyle($range)->applyFromArray([
-            'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 11],
-            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $color]],
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 11],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $color]],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFCCCCCC']]],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFCCCCCC']]],
         ]);
     }
 }

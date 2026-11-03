@@ -4,12 +4,12 @@ namespace App\Mail;
 
 use App\Models\Certificate;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue; // 🔥 IMPORTANTE
+// 🔥 IMPORTANTE
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Support\Facades\Storage;
 
 class CertificateSent extends Mailable
@@ -32,7 +32,7 @@ class CertificateSent extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Tu Certificado del Curso: ' . $this->certificate->course->nombre,
+            subject: 'Tu Certificado del Curso: '.$this->certificate->course->nombre,
         );
     }
 
@@ -52,10 +52,10 @@ class CertificateSent extends Mailable
     public function attachments(): array
     {
         return [
-                Attachment::fromPath(
+            Attachment::fromPath(
                 Storage::disk('public')->path($this->certificate->pdf_path)
-                )
-                ->as('Certificado-' . $this->certificate->unique_code . '.pdf')
+            )
+                ->as('Certificado-'.$this->certificate->unique_code.'.pdf')
                 ->withMime('application/pdf'),
         ];
     }

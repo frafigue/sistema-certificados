@@ -12,7 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
-            'is.root'     => \App\Http\Middleware\IsRoot::class,
+            'is.root' => \App\Http\Middleware\IsRoot::class,
             // ✅ NUEVO: middleware para bloquear usuarios inactivos
             'check.activo' => \App\Http\Middleware\CheckUserActivo::class,
         ]);

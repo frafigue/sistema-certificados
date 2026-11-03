@@ -2,21 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\Subarea;
 use App\Models\Area;
-use App\Models\User;   // ← AGREGAR
-use Illuminate\Support\Facades\Blade;
+use App\Models\Subarea;
+use App\Models\User;
+use Barryvdh\DomPDF\Facade\Pdf;   // ← AGREGAR
+use iio\libmergepdf\Merger;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
-use iio\libmergepdf\Merger;
 use Throwable;
 
 class SubareaController extends Controller
 {
     const PDF_W = 1122;
+
     const PDF_H = 793;
 
     public function index()
@@ -102,6 +103,7 @@ class SubareaController extends Controller
     public function show(string $id)
     {
         $subarea = Subarea::with(['area', 'gestor'])->findOrFail($id);
+
         return view('subareas.show', compact('subarea'));
     }
 
@@ -204,21 +206,25 @@ class SubareaController extends Controller
     public function designTemplate(Subarea $subarea)
     {
         $user = Auth::user();
-        if (!$this->canAccessSubarea($user, $subarea)) {
+        if (! $this->canAccessSubarea($user, $subarea)) {
             abort(403, 'No tienes permisos para diseñar las plantillas de esta subárea.');
         }
 
         $designFront = null;
-        $designBack  = null;
+        $designBack = null;
 
         if ($subarea->template_front) {
             $decoded = $this->extractDesignFromTemplate($subarea->template_front);
-            if ($decoded) $designFront = $decoded;
+            if ($decoded) {
+                $designFront = $decoded;
+            }
         }
 
         if ($subarea->template_back) {
             $decoded = $this->extractDesignFromTemplate($subarea->template_back);
-            if ($decoded) $designBack = $decoded;
+            if ($decoded) {
+                $designBack = $decoded;
+            }
         }
 
         return view('subareas.design-visual', compact('subarea', 'designFront', 'designBack'));
@@ -227,22 +233,22 @@ class SubareaController extends Controller
     public function uploadBackground(Request $request, Subarea $subarea)
     {
         $user = Auth::user();
-        if (!$this->canAccessSubarea($user, $subarea)) {
+        if (! $this->canAccessSubarea($user, $subarea)) {
             abort(403);
         }
 
         $request->validate([
             'image' => 'required|image|max:5120',
-            'side'  => 'required|in:front,back',
+            'side' => 'required|in:front,back',
         ]);
 
         $path = $request->file('image')->store(
-            'subarea-backgrounds/' . $subarea->id,
+            'subarea-backgrounds/'.$subarea->id,
             'public'
         );
 
         return response()->json([
-            'url'  => Storage::disk('public')->url($path),
+            'url' => Storage::disk('public')->url($path),
             'path' => $path,
         ]);
     }
@@ -250,45 +256,45 @@ class SubareaController extends Controller
     public function saveTemplate(Request $request, Subarea $subarea)
     {
         $user = Auth::user();
-        if (!$this->canAccessSubarea($user, $subarea)) {
+        if (! $this->canAccessSubarea($user, $subarea)) {
             abort(403, 'No tienes permisos para guardar las plantillas de esta subárea.');
         }
 
         $request->validate([
             'design_front' => 'required|string',
-            'design_back'  => 'nullable|string',
+            'design_back' => 'nullable|string',
             // Tamaño de papel (nuevos, opcionales)
-            'paper_size'   => 'nullable|in:A4,A5,Oficio,Carta,custom',
-            'orientation'  => 'nullable|in:portrait,landscape',
-            'width_cm'     => 'nullable|numeric|min:1|max:200',
-            'height_cm'    => 'nullable|numeric|min:1|max:200',
+            'paper_size' => 'nullable|in:A4,A5,Oficio,Carta,custom',
+            'orientation' => 'nullable|in:portrait,landscape',
+            'width_cm' => 'nullable|numeric|min:1|max:200',
+            'height_cm' => 'nullable|numeric|min:1|max:200',
         ]);
 
         $designFront = json_decode($request->design_front, true);
-        $designBack  = $request->filled('design_back')
+        $designBack = $request->filled('design_back')
             ? json_decode($request->design_back, true)
             : ['background' => '', 'elements' => []];
 
-        if (!$designFront) {
+        if (! $designFront) {
             return back()->withErrors(['design' => 'El diseño del frente no es válido.']);
         }
 
         $designFront = $this->sanitizeDesignBase64($designFront, $subarea, 'front');
-        $designBack  = $this->sanitizeDesignBase64($designBack,  $subarea, 'back');
+        $designBack = $this->sanitizeDesignBase64($designBack, $subarea, 'back');
 
         $service = app(\App\Services\CertificateService::class);
 
         $templateFront = $service->buildHtmlFromDesign($designFront);
-        $templateBack  = $service->buildHtmlFromDesign($designBack);
+        $templateBack = $service->buildHtmlFromDesign($designBack);
 
         $subarea->update([
-            'template_front'       => $templateFront,
-            'template_back'        => $templateBack,
+            'template_front' => $templateFront,
+            'template_back' => $templateBack,
             // Tamaño de papel (nuevos)
-            'template_paper_size'  => $request->paper_size  ?? $subarea->template_paper_size  ?? 'A4',
+            'template_paper_size' => $request->paper_size ?? $subarea->template_paper_size ?? 'A4',
             'template_orientation' => $request->orientation ?? $subarea->template_orientation ?? 'landscape',
-            'template_width_cm'    => $request->width_cm    ?? $subarea->template_width_cm,
-            'template_height_cm'   => $request->height_cm   ?? $subarea->template_height_cm,
+            'template_width_cm' => $request->width_cm ?? $subarea->template_width_cm,
+            'template_height_cm' => $request->height_cm ?? $subarea->template_height_cm,
         ]);
 
         return redirect()->route('subareas.design', $subarea)
@@ -301,39 +307,39 @@ class SubareaController extends Controller
         ini_set('memory_limit', '512M');
 
         $user = Auth::user();
-        if (!$this->canAccessSubarea($user, $subarea)) {
+        if (! $this->canAccessSubarea($user, $subarea)) {
             abort(403);
         }
 
         $request->validate([
             'design_front' => 'required|string',
-            'design_back'  => 'required|string',
+            'design_back' => 'required|string',
         ]);
 
         $designFront = json_decode($request->design_front, true);
-        $designBack  = json_decode($request->design_back,  true);
+        $designBack = json_decode($request->design_back, true);
 
-        if (!$designFront || !$designBack) {
+        if (! $designFront || ! $designBack) {
             return response()->json(['error' => 'Diseño inválido.'], 422);
         }
 
         $designFront = $this->sanitizeDesignBase64($designFront, $subarea, 'front');
-        $designBack  = $this->sanitizeDesignBase64($designBack,  $subarea, 'back');
+        $designBack = $this->sanitizeDesignBase64($designBack, $subarea, 'back');
 
-        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($subarea, 'livepreview_' . time());
+        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($subarea, 'livepreview_'.time());
 
         try {
             $service = app(\App\Services\CertificateService::class);
 
             $templateFront = $service->buildHtmlFromDesign($designFront);
-            $htmlFront     = Blade::render($templateFront, $data);
+            $htmlFront = Blade::render($templateFront, $data);
             unset($templateFront);
 
             $backEmpty = empty($designBack['elements']) && empty($designBack['background']);
-            $htmlBack  = null;
-            if (!$backEmpty) {
+            $htmlBack = null;
+            if (! $backEmpty) {
                 $templateBack = $service->buildHtmlFromDesign($designBack);
-                $htmlBack     = Blade::render($templateBack, $data);
+                $htmlBack = Blade::render($templateBack, $data);
                 unset($templateBack);
             }
 
@@ -341,9 +347,9 @@ class SubareaController extends Controller
 
             return response($finalPdfContent, 200)
                 ->header('Content-Type', 'application/pdf')
-                ->header('Content-Disposition', 'inline; filename="preview_' . $subarea->nombre . '.pdf"');
+                ->header('Content-Disposition', 'inline; filename="preview_'.$subarea->nombre.'.pdf"');
         } catch (Throwable $e) {
-            return response('Error al generar la preview: ' . $e->getMessage(), 500);
+            return response('Error al generar la preview: '.$e->getMessage(), 500);
         }
     }
 
@@ -353,7 +359,7 @@ class SubareaController extends Controller
         ini_set('memory_limit', '512M');
 
         $user = Auth::user();
-        if (!$this->canAccessSubarea($user, $subarea)) {
+        if (! $this->canAccessSubarea($user, $subarea)) {
             abort(403);
         }
 
@@ -362,19 +368,19 @@ class SubareaController extends Controller
         }
 
         $designFront = $this->extractDesignFromTemplate($subarea->template_front);
-        $designBack  = $this->extractDesignFromTemplate($subarea->template_back);
+        $designBack = $this->extractDesignFromTemplate($subarea->template_back);
 
         $service = app(\App\Services\CertificateService::class);
 
         if ($designFront && $designBack) {
             $templateFront = $service->buildHtmlFromDesign($designFront);
-            $templateBack  = $service->buildHtmlFromDesign($designBack);
+            $templateBack = $service->buildHtmlFromDesign($designBack);
         } else {
             $templateFront = $subarea->template_front;
-            $templateBack  = $subarea->template_back;
+            $templateBack = $subarea->template_back;
         }
 
-        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($subarea, 'preview_' . time());
+        [$data, $tempPath, $uniqueCode] = $this->buildPreviewData($subarea, 'preview_'.time());
 
         try {
             $htmlFront = Blade::render($templateFront, $data);
@@ -382,8 +388,8 @@ class SubareaController extends Controller
 
             $backEmpty = empty($designBack) ||
                 (empty($designBack['elements']) && empty($designBack['background']));
-            $htmlBack  = null;
-            if (!$backEmpty && !empty($templateBack)) {
+            $htmlBack = null;
+            if (! $backEmpty && ! empty($templateBack)) {
                 $htmlBack = Blade::render($templateBack, $data);
                 unset($templateBack);
             }
@@ -394,20 +400,20 @@ class SubareaController extends Controller
                 ->header('Content-Type', 'application/pdf')
                 ->header('Content-Disposition', 'inline; filename="preview.pdf"');
         } catch (Throwable $e) {
-            return 'Error al renderizar la plantilla: ' . $e->getMessage();
+            return 'Error al renderizar la plantilla: '.$e->getMessage();
         }
     }
 
     public function clearTemplate(Subarea $subarea)
     {
         $user = Auth::user();
-        if (!$this->canAccessSubarea($user, $subarea)) {
+        if (! $this->canAccessSubarea($user, $subarea)) {
             abort(403);
         }
 
         $subarea->update([
             'template_front' => null,
-            'template_back'  => null,
+            'template_back' => null,
         ]);
 
         return redirect()->route('subareas.design', $subarea)
@@ -420,7 +426,9 @@ class SubareaController extends Controller
 
     private function canAccessSubarea($user, $subarea): bool
     {
-        if ($user->can('is-root')) return true;
+        if ($user->can('is-root')) {
+            return true;
+        }
 
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             return $subarea->area_id == $user->area_id;
@@ -436,15 +444,15 @@ class SubareaController extends Controller
     private function buildPreviewData(Subarea $subarea, string $uniqueCode): array
     {
         $person = new \App\Models\Person([
-            'nombre'   => 'Juan',
+            'nombre' => 'Juan',
             'apellido' => 'Pérez',
-            'dni'      => '12345678',
+            'dni' => '12345678',
         ]);
 
         $course = new \App\Models\Course([
-            'nombre'    => 'Curso de Ejemplo',
-            'horas'     => 40,
-            'objetivo'  => 'Capacitar al personal en el uso de herramientas tecnológicas.',
+            'nombre' => 'Curso de Ejemplo',
+            'horas' => 40,
+            'objetivo' => 'Capacitar al personal en el uso de herramientas tecnológicas.',
             'contenido' => 'Módulo 1: Introducción. Módulo 2: Práctica. Módulo 3: Evaluación.',
         ]);
         $course->area = $subarea->area;
@@ -458,22 +466,22 @@ class SubareaController extends Controller
         ]));
 
         $certificateData = [
-            'cuv'                 => 'UAAREASUB1' . date('Y') . 'APRJP678',
+            'cuv' => 'UAAREASUB1'.date('Y').'APRJP678',
             'tipo_de_certificado' => 'Aprobado',
-            'tipo_certificado'    => 'APR',
-            'ano'                 => date('Y'),
-            'horas'               => 40,
-            'nota'                => 8,
-            'unidad_academica'    => 'UA',
-            'area'                => 'AREA',
-            'subarea'             => 'SUB',
+            'tipo_certificado' => 'APR',
+            'ano' => date('Y'),
+            'horas' => 40,
+            'nota' => 8,
+            'unidad_academica' => 'UA',
+            'area' => 'AREA',
+            'subarea' => 'SUB',
         ];
 
         $data = [
-            'person'          => $person,
-            'course'          => $course,
+            'person' => $person,
+            'course' => $course,
             'certificateData' => $certificateData,
-            'qr_path'         => public_path('images/logo.png'),
+            'qr_path' => public_path('images/logo.png'),
         ];
 
         $tempPath = storage_path('app/temp_pdf');
@@ -488,14 +496,14 @@ class SubareaController extends Controller
         if ($bg && str_starts_with($bg, 'data:image/')) {
             try {
                 preg_match('/^data:(image\/\w+);base64,/', $bg, $matches);
-                $mimeType  = $matches[1] ?? 'image/png';
+                $mimeType = $matches[1] ?? 'image/png';
                 $extension = str_replace('image/', '', $mimeType);
                 $imageData = base64_decode(preg_replace('/^data:image\/\w+;base64,/', '', $bg));
 
-                $filename = 'subarea-backgrounds/' . $subarea->id . '/' . $side . '_' . time() . '.' . $extension;
+                $filename = 'subarea-backgrounds/'.$subarea->id.'/'.$side.'_'.time().'.'.$extension;
                 Storage::disk('public')->put($filename, $imageData);
 
-                $design['background'] = '/storage/' . $filename;
+                $design['background'] = '/storage/'.$filename;
                 unset($imageData);
             } catch (Throwable $e) {
                 $design['background'] = '';
@@ -509,15 +517,17 @@ class SubareaController extends Controller
     {
         if (preg_match('/<!-- DESIGN_JSON:(.*?):END_DESIGN_JSON -->/s', $html, $matches)) {
             $json = html_entity_decode($matches[1], ENT_QUOTES);
+
             return json_decode($json, true);
         }
+
         return null;
     }
 
     private function generateCertificatePdf(string $htmlFront, ?string $htmlBack, string $tempPath, string $uniqueCode): string
     {
         File::ensureDirectoryExists($tempPath);
-        $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
+        $frontFilePath = $tempPath.'/'.$uniqueCode.'_front.pdf';
 
         Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape')->save($frontFilePath);
         unset($htmlFront);
@@ -525,10 +535,11 @@ class SubareaController extends Controller
         if (empty($htmlBack)) {
             $content = File::get($frontFilePath);
             File::delete($frontFilePath);
+
             return $content;
         }
 
-        $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
+        $backFilePath = $tempPath.'/'.$uniqueCode.'_back.pdf';
         Pdf::loadHTML($htmlBack)->setPaper('a4', 'landscape')->save($backFilePath);
         unset($htmlBack);
 
@@ -538,6 +549,7 @@ class SubareaController extends Controller
         $finalPdfContent = $merger->merge();
 
         File::delete($frontFilePath, $backFilePath);
+
         return $finalPdfContent;
     }
 }

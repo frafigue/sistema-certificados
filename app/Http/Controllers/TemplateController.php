@@ -2,19 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\CertificateTemplate;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
-use Barryvdh\DomPDF\Facade\Pdf;
-use iio\libmergepdf\Merger;
 use Throwable;
 
 class TemplateController extends Controller
 {
     const PDF_W = 1122;
+
     const PDF_H = 793;
 
     // =========================================================================
@@ -130,11 +129,13 @@ class TemplateController extends Controller
         $this->authorizeAccess($template);
 
         $designFront = null;
-        $designBack  = null;
+        $designBack = null;
 
         if ($template->components) {
             $decoded = json_decode($template->components, true);
-            if ($decoded) $designFront = $decoded;
+            if ($decoded) {
+                $designFront = $decoded;
+            }
         }
 
         return view('templates.design-visual', compact('template', 'designFront', 'designBack'));
@@ -146,16 +147,16 @@ class TemplateController extends Controller
 
         $request->validate([
             'image' => 'required|image|max:5120',
-            'side'  => 'required|in:front,back',
+            'side' => 'required|in:front,back',
         ]);
 
         $path = $request->file('image')->store(
-            'template-backgrounds/' . $template->id,
+            'template-backgrounds/'.$template->id,
             'public'
         );
 
         return response()->json([
-            'url'  => Storage::disk('public')->url($path),
+            'url' => Storage::disk('public')->url($path),
             'path' => $path,
         ]);
     }
@@ -166,20 +167,20 @@ class TemplateController extends Controller
 
         $request->validate([
             'design_front' => 'required|string',
-            'design_back'  => 'nullable|string',
+            'design_back' => 'nullable|string',
         ]);
 
         $designFront = json_decode($request->design_front, true);
-        $designBack  = $request->filled('design_back')
+        $designBack = $request->filled('design_back')
             ? json_decode($request->design_back, true)
             : ['background' => '', 'elements' => []];
 
-        if (!$designFront) {
+        if (! $designFront) {
             return back()->withErrors(['design' => 'El diseño del frente no es válido.']);
         }
 
         $designFront = $this->sanitizeDesignBase64($designFront, $template, 'front');
-        $designBack  = $this->sanitizeDesignBase64($designBack,  $template, 'back');
+        $designBack = $this->sanitizeDesignBase64($designBack, $template, 'back');
 
         $template->update([
             'components' => json_encode($designFront),
@@ -213,17 +214,17 @@ class TemplateController extends Controller
             $pdf = Pdf::loadHTML($htmlFront)
                 ->setPaper('a4', 'landscape')
                 ->setOptions([
-                    'dpi'                     => 96,
-                    'defaultFont'             => 'sans-serif',
-                    'isRemoteEnabled'         => false,
-                    'isHtml5ParserEnabled'    => true,
+                    'dpi' => 96,
+                    'defaultFont' => 'sans-serif',
+                    'isRemoteEnabled' => false,
+                    'isHtml5ParserEnabled' => true,
                     'isFontSubsettingEnabled' => true,
                 ]);
 
             return $pdf->stream('preview.pdf');
 
         } catch (Throwable $e) {
-            return 'Error al renderizar la plantilla: ' . $e->getMessage();
+            return 'Error al renderizar la plantilla: '.$e->getMessage();
         }
     }
 
@@ -259,15 +260,15 @@ class TemplateController extends Controller
     private function buildPreviewData(CertificateTemplate $template): array
     {
         $person = new \App\Models\Person([
-            'nombre'   => 'Juan',
+            'nombre' => 'Juan',
             'apellido' => 'Pérez',
-            'dni'      => '12345678',
+            'dni' => '12345678',
         ]);
 
         $course = new \App\Models\Course([
-            'nombre'    => 'Curso de Ejemplo',
-            'horas'     => 40,
-            'objetivo'  => 'Capacitar al personal en el uso de herramientas tecnológicas.',
+            'nombre' => 'Curso de Ejemplo',
+            'horas' => 40,
+            'objetivo' => 'Capacitar al personal en el uso de herramientas tecnológicas.',
             'contenido' => 'Módulo 1: Introducción. Módulo 2: Práctica. Módulo 3: Evaluación.',
         ]);
 
@@ -280,22 +281,22 @@ class TemplateController extends Controller
         ]));
 
         $certificateData = [
-            'cuv'                 => 'UAAREASUB1' . date('Y') . 'APRJP678',
+            'cuv' => 'UAAREASUB1'.date('Y').'APRJP678',
             'tipo_de_certificado' => 'Aprobado',
-            'tipo_certificado'    => 'APR',
-            'ano'                 => date('Y'),
-            'horas'               => 40,
-            'nota'                => 8,
-            'unidad_academica'    => 'UA',
-            'area'                => 'AREA',
-            'subarea'             => 'SUB',
+            'tipo_certificado' => 'APR',
+            'ano' => date('Y'),
+            'horas' => 40,
+            'nota' => 8,
+            'unidad_academica' => 'UA',
+            'area' => 'AREA',
+            'subarea' => 'SUB',
         ];
 
         return [
-            'person'          => $person,
-            'course'          => $course,
+            'person' => $person,
+            'course' => $course,
             'certificateData' => $certificateData,
-            'qr_path'         => public_path('images/logo.png'),
+            'qr_path' => public_path('images/logo.png'),
         ];
     }
 
@@ -306,14 +307,14 @@ class TemplateController extends Controller
         if ($bg && str_starts_with($bg, 'data:image/')) {
             try {
                 preg_match('/^data:(image\/\w+);base64,/', $bg, $matches);
-                $mimeType  = $matches[1] ?? 'image/png';
+                $mimeType = $matches[1] ?? 'image/png';
                 $extension = str_replace('image/', '', $mimeType);
                 $imageData = base64_decode(preg_replace('/^data:image\/\w+;base64,/', '', $bg));
 
-                $filename = 'template-backgrounds/' . $template->id . '/' . $side . '_' . time() . '.' . $extension;
+                $filename = 'template-backgrounds/'.$template->id.'/'.$side.'_'.time().'.'.$extension;
                 Storage::disk('public')->put($filename, $imageData);
 
-                $design['background'] = '/storage/' . $filename;
+                $design['background'] = '/storage/'.$filename;
                 unset($imageData);
             } catch (Throwable $e) {
                 $design['background'] = '';
@@ -322,7 +323,7 @@ class TemplateController extends Controller
 
         return $design;
     }
-    
+
     // =========================================================================
     // MÉTODOS PARA INTEGRACIÓN CON EL EDITOR (modal "Usar plantilla")
     // =========================================================================
@@ -337,7 +338,7 @@ class TemplateController extends Controller
 
         $query = CertificateTemplate::orderBy('created_at', 'desc');
 
-        if (!$user->can('is-root')) {
+        if (! $user->can('is-root')) {
             $query->where('created_by', $user->id);
         }
 
@@ -363,7 +364,7 @@ class TemplateController extends Controller
 
         return response()->json($template);
     }
-    
+
     /**
      * Guarda una plantilla desde el editor (AJAX).
      * Toma el JSON de `designs` del editor, lo decodifica y lo guarda.
@@ -371,35 +372,35 @@ class TemplateController extends Controller
     public function quickSave(Request $request)
     {
         $request->validate([
-            'nombre'      => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
             'descripcion' => 'nullable|string',
-            'paper_size'  => 'required|in:A4,A5,Oficio,Carta,custom',
+            'paper_size' => 'required|in:A4,A5,Oficio,Carta,custom',
             'orientation' => 'required|in:portrait,landscape',
-            'width_cm'    => 'nullable|numeric|min:1|max:200',
-            'height_cm'   => 'nullable|numeric|min:1|max:200',
-            'components'  => 'required|string',
+            'width_cm' => 'nullable|numeric|min:1|max:200',
+            'height_cm' => 'nullable|numeric|min:1|max:200',
+            'components' => 'required|string',
         ]);
 
         $decoded = json_decode($request->components, true);
-        if (!$decoded || !isset($decoded['front'])) {
+        if (! $decoded || ! isset($decoded['front'])) {
             return response()->json(['message' => 'El diseño no es válido.'], 422);
         }
 
         $template = CertificateTemplate::create([
-            'nombre'          => $request->nombre,
-            'descripcion'     => $request->descripcion,
-            'paper_size'      => $request->paper_size,
-            'orientation'     => $request->orientation,
-            'width_cm'        => $request->paper_size === 'custom' ? $request->width_cm : null,
-            'height_cm'       => $request->paper_size === 'custom' ? $request->height_cm : null,
-            'background_image'=> null,
-            'components'      => $request->components,  // ← GUARDAR EL JSON COMPLETO
-            'is_public'       => false,
-            'created_by'      => Auth::id(),
+            'nombre' => $request->nombre,
+            'descripcion' => $request->descripcion,
+            'paper_size' => $request->paper_size,
+            'orientation' => $request->orientation,
+            'width_cm' => $request->paper_size === 'custom' ? $request->width_cm : null,
+            'height_cm' => $request->paper_size === 'custom' ? $request->height_cm : null,
+            'background_image' => null,
+            'components' => $request->components,  // ← GUARDAR EL JSON COMPLETO
+            'is_public' => false,
+            'created_by' => Auth::id(),
         ]);
 
         return response()->json([
-            'id'     => $template->id,
+            'id' => $template->id,
             'nombre' => $template->nombre,
         ]);
     }

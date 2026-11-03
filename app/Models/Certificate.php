@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Models\ImportHistory;
 
 class Certificate extends Model
 {
@@ -25,8 +24,8 @@ class Certificate extends Model
         'unique_code', // nuestro 'CUV'
         'qr_path',
         'pdf_path',
-        'unidad_academica', 
-        'area_excel',  
+        'unidad_academica',
+        'area_excel',
         'subarea',
         'email_status',
         'email_sent_at',
@@ -48,11 +47,11 @@ class Certificate extends Model
     public function scopeForUserArea($query, $user)
     {
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
-            return $query->whereHas('course', function($q) use ($user) {
+            return $query->whereHas('course', function ($q) use ($user) {
                 $q->where('area_id', $user->area_id);
             });
         }
-        
+
         return $query;
     }
 
@@ -71,7 +70,7 @@ class Certificate extends Model
     // Accessor para verificar si el PDF existe
     public function getPdfExistsAttribute()
     {
-        return $this->pdf_path && file_exists(storage_path('app/public/' . $this->pdf_path));
+        return $this->pdf_path && file_exists(storage_path('app/public/'.$this->pdf_path));
     }
 
     // Método para verificar si un usuario puede acceder a este certificado
@@ -81,19 +80,21 @@ class Certificate extends Model
         if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
             return $this->course->area_id == $user->area_id;
         }
-        
+
         // Si es persona, debe ser su propio certificado
         if ($user->person) {
             return $this->person_id == $user->person->id;
         }
-        
+
         return false;
     }
+
     public function importHistory(): BelongsTo
     {
         return $this->belongsTo(ImportHistory::class);
     }
-        /**
+
+    /**
      * Subárea a la que pertenece este certificado (nullable)
      */
     public function subarea()

@@ -24,7 +24,6 @@ class Resolution extends Model
      */
     protected $dates = ['deleted_at'];
 
-
     public function area()
     {
         return $this->belongsTo(\App\Models\Area::class);

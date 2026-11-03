@@ -3,14 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\ImportHistory;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class ImportHistoryController extends Controller
 {
     public function index()
     {
-        $user  = Auth::user();
+        $user = Auth::user();
         $query = ImportHistory::with('user')->latest();
 
         // Filtrar por área si es Administrador
@@ -27,10 +26,10 @@ class ImportHistoryController extends Controller
         }
 
         $totals = [
-            'total'      => $totalsQuery->count(),
-            'completed'  => (clone $totalsQuery)->where('status', 'completed')->count(),
+            'total' => $totalsQuery->count(),
+            'completed' => (clone $totalsQuery)->where('status', 'completed')->count(),
             'processing' => (clone $totalsQuery)->where('status', 'processing')->count(),
-            'failed'     => (clone $totalsQuery)->where('status', 'failed')->count(),
+            'failed' => (clone $totalsQuery)->where('status', 'failed')->count(),
         ];
 
         return view('import-history.index', compact('imports', 'totals'));

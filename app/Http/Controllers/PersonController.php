@@ -2,29 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\Person;
-use Illuminate\Validation\Rule;
 use App\Imports\PersonsImport;
-use Maatwebsite\Excel\Facades\Excel;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
 use App\Models\Area;
+use App\Models\Person;
 use App\Models\Role;
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PersonController extends Controller
 {
     public function index(Request $request)
     {
-        $user  = Auth::user();
+        $user = Auth::user();
         $query = Person::query();
 
         if ($user->role?->name === 'Administrador' && $user->area_id) {
-            $query->whereHas('areas', function($q) use ($user) {
+            $query->whereHas('areas', function ($q) use ($user) {
                 $q->where('areas.id', $user->area_id);
             });
         } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
@@ -32,29 +30,30 @@ class PersonController extends Controller
         }
 
         if ($request->filled('dni')) {
-            $query->where('dni', 'like', '%' . $request->dni . '%');
+            $query->where('dni', 'like', '%'.$request->dni.'%');
         }
         if ($request->filled('nombre')) {
-            $query->where(function($q) use ($request) {
-                $q->where('nombre', 'like', '%' . $request->nombre . '%')
-                ->orWhere('apellido', 'like', '%' . $request->nombre . '%');
+            $query->where(function ($q) use ($request) {
+                $q->where('nombre', 'like', '%'.$request->nombre.'%')
+                    ->orWhere('apellido', 'like', '%'.$request->nombre.'%');
             });
         }
 
         $people = $query->latest()->paginate(10)->withQueryString();
+
         return view('persons.index', compact('people'));
     }
 
     public function create()
     {
-        $user  = Auth::user();
+        $user = Auth::user();
         $areas = Area::all();
 
         if ($user->role?->name === 'Administrador') {
             $areas = Area::where('id', $user->area_id)->get();
         } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
             $subarea = $user->subarea;
-            $areas   = Area::where('id', $subarea->area_id)->get();
+            $areas = Area::where('id', $subarea->area_id)->get();
         }
 
         return view('persons.create', compact('areas'));
@@ -66,14 +65,14 @@ class PersonController extends Controller
         $request->merge(['email' => strtolower(trim($request->email))]);
 
         $data = $request->validate([
-            'dni'       => 'required|string',
-            'apellido'  => 'required|string|max:255',
-            'nombre'    => 'required|string|max:255',
-            'titulo'    => 'nullable|string|max:255',
+            'dni' => 'required|string',
+            'apellido' => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
+            'titulo' => 'nullable|string|max:255',
             'domicilio' => 'nullable|string|max:255',
-            'telefono'  => 'nullable|string|max:255',
-            'email'     => 'required|email',
-            'area_id'   => 'required|exists:areas,id',
+            'telefono' => 'nullable|string|max:255',
+            'email' => 'required|email',
+            'area_id' => 'required|exists:areas,id',
         ]);
 
         $existingPerson = Person::where('dni', $data['dni'])->first();
@@ -98,6 +97,7 @@ class PersonController extends Controller
             $existingPerson->areas()->attach($data['area_id']);
 
             $areaNueva = Area::find($data['area_id']);
+
             return redirect()->route('persons.index')
                 ->with('success', "La persona {$existingPerson->nombre} {$existingPerson->apellido} fue agregada al área \"{$areaNueva->nombre}\" exitosamente.");
         }
@@ -122,18 +122,17 @@ class PersonController extends Controller
 
         if ($personaRole) {
             $nuevoUsuario = User::create([
-                'name'     => $person->nombre . ' ' . $person->apellido,
-                'email'    => $person->email,
+                'name' => $person->nombre.' '.$person->apellido,
+                'email' => $person->email,
                 'password' => Hash::make($person->dni),
-                'role_id'  => $personaRole->id,
-                'area_id'  => $person->area_id,
+                'role_id' => $personaRole->id,
+                'area_id' => $person->area_id,
             ]);
             $person->user_id = $user->id;
             $person->save();
         }
 
         $person->areas()->attach($data['area_id']);
-        
 
         // Si es Gestor, asignar la subárea
         if ($user->role?->name === 'Gestor' && $user->subarea_id) {
@@ -153,43 +152,44 @@ class PersonController extends Controller
     public function analyzeImport(Request $request)
     {
         $request->validate([
-            'excel_file' => 'required|file|mimes:xlsx,xls,csv|max:10240'
+            'excel_file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
         ]);
 
         try {
-            $file     = $request->file('excel_file');
+            $file = $request->file('excel_file');
             $tempPath = $file->store('temp_imports', 'local');
             $fullPath = Storage::disk('local')->path($tempPath);
 
-            Log::info('Archivo temporal guardado en: ' . $fullPath);
+            Log::info('Archivo temporal guardado en: '.$fullPath);
 
             $import = new PersonsImport(analyzeOnly: true);
             Excel::import($import, $fullPath);
 
-            $newCount       = $import->getImportedCount();
-            $withChanges    = $import->getWithChanges();
+            $newCount = $import->getImportedCount();
+            $withChanges = $import->getWithChanges();
             $withoutChanges = $import->getWarnings();
-            $errors         = $import->getErrors();
-            $totalRows      = $import->getTotalRows();
+            $errors = $import->getErrors();
+            $totalRows = $import->getTotalRows();
 
             session([
                 'import_temp_path' => $tempPath,
-                'import_analysis'  => [
-                    'new_count'       => $newCount,
-                    'with_changes'    => $withChanges,
+                'import_analysis' => [
+                    'new_count' => $newCount,
+                    'with_changes' => $withChanges,
                     'without_changes' => $withoutChanges,
-                    'errors'          => $errors,
-                    'total_rows'      => $totalRows,
+                    'errors' => $errors,
+                    'total_rows' => $totalRows,
                 ],
             ]);
 
             return redirect()->route('persons.import.preview');
 
         } catch (\Exception $e) {
-            Log::error('Error en análisis de importación: ' . $e->getMessage());
+            Log::error('Error en análisis de importación: '.$e->getMessage());
             Log::error($e->getTraceAsString());
+
             return redirect()->route('persons.import.form')
-                ->with('error', 'Error al analizar el archivo: ' . $e->getMessage());
+                ->with('error', 'Error al analizar el archivo: '.$e->getMessage());
         }
     }
 
@@ -198,7 +198,7 @@ class PersonController extends Controller
         $analysis = session('import_analysis');
         $tempPath = session('import_temp_path');
 
-        if (!$analysis || !$tempPath) {
+        if (! $analysis || ! $tempPath) {
             return redirect()->route('persons.import.form')
                 ->with('error', 'No hay datos de análisis. Por favor subí el archivo nuevamente.');
         }
@@ -211,7 +211,7 @@ class PersonController extends Controller
         $analysis = session('import_analysis');
         $tempPath = session('import_temp_path');
 
-        if (!$analysis || !$tempPath) {
+        if (! $analysis || ! $tempPath) {
             return redirect()->route('persons.import.form')
                 ->with('error', 'Sesión expirada. Por favor subí el archivo nuevamente.');
         }
@@ -221,7 +221,7 @@ class PersonController extends Controller
         try {
             $fullPath = Storage::disk('local')->path($tempPath);
 
-            Log::info('Confirmando importación desde: ' . $fullPath);
+            Log::info('Confirmando importación desde: '.$fullPath);
 
             $import = new PersonsImport(analyzeOnly: false, dniesToUpdate: $dniesToUpdate);
             Excel::import($import, $fullPath);
@@ -229,33 +229,34 @@ class PersonController extends Controller
             $import->onImportCompleted();
 
             $importedCount = $import->getImportedCount();
-            $errors        = $import->getErrors();
-            $warnings      = $import->getWarnings();
-            $withChanges   = $import->getWithChanges();
+            $errors = $import->getErrors();
+            $warnings = $import->getWarnings();
+            $withChanges = $import->getWithChanges();
 
             Storage::disk('local')->delete($tempPath);
             session()->forget(['import_temp_path', 'import_analysis']);
 
-            $updatedCount = count(array_filter($withChanges, fn($w) => in_array($w['dni'], $dniesToUpdate)));
-            $message      = "Importación completada. {$importedCount} personas nuevas agregadas.";
+            $updatedCount = count(array_filter($withChanges, fn ($w) => in_array($w['dni'], $dniesToUpdate)));
+            $message = "Importación completada. {$importedCount} personas nuevas agregadas.";
             if ($updatedCount > 0) {
                 $message .= " {$updatedCount} persona(s) actualizadas.";
             }
 
-            if (!empty($errors)) {
+            if (! empty($errors)) {
                 return redirect()->route('persons.import.form')
                     ->with('import_errors', $errors)
                     ->with('import_warnings', $warnings)
-                    ->with('warning', $message . ' Revisá los avisos a continuación.');
+                    ->with('warning', $message.' Revisá los avisos a continuación.');
             }
 
             return redirect()->route('persons.index')->with('success', $message);
 
         } catch (\Exception $e) {
-            Log::error('Error en confirmación de importación: ' . $e->getMessage());
+            Log::error('Error en confirmación de importación: '.$e->getMessage());
             Log::error($e->getTraceAsString());
+
             return redirect()->route('persons.import.form')
-                ->with('error', 'Error al importar: ' . $e->getMessage());
+                ->with('error', 'Error al importar: '.$e->getMessage());
         }
     }
 
@@ -268,13 +269,14 @@ class PersonController extends Controller
     {
         $this->generateTemplate();
         $filePath = storage_path('app/templates/plantilla_importacion_personas.xlsx');
+
         return response()->download($filePath, 'plantilla_importacion_personas.xlsx');
     }
 
     private function generateTemplate()
     {
         try {
-            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet;
 
             while ($spreadsheet->getSheetCount() > 1) {
                 $spreadsheet->removeSheetByIndex(1);
@@ -288,13 +290,13 @@ class PersonController extends Controller
                 $sheet->setCellValueByColumnAndRow($index + 1, 1, $header);
             }
 
-            $user       = Auth::user();
+            $user = Auth::user();
             $areasQuery = Area::query();
             if ($user->role?->name === 'Administrador' && $user->area_id) {
                 $areasQuery->where('id', $user->area_id);
             }
 
-            $areas       = $areasQuery->get();
+            $areas = $areasQuery->get();
             $exampleArea = $areas->where('id', $user->area_id)->first() ?? $areas->first();
 
             $exampleData = [
@@ -321,14 +323,14 @@ class PersonController extends Controller
             $sheet->getStyle('A4')->getFont()->setItalic(true)->setSize(9)->getColor()->setARGB('FF0000FF');
 
             $areasDisponibles = $areas->pluck('nombre')->implode(', ');
-            $sheet->setCellValue('A5', 'Áreas disponibles: ' . $areasDisponibles);
+            $sheet->setCellValue('A5', 'Áreas disponibles: '.$areasDisponibles);
             $sheet->mergeCells('A5:H5');
             $sheet->getStyle('A5')->getFont()->setSize(9)->setBold(true)->getColor()->setARGB('FF006400');
 
-            $writer   = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $filePath = storage_path('app/templates/plantilla_importacion_personas.xlsx');
 
-            if (!file_exists(dirname($filePath))) {
+            if (! file_exists(dirname($filePath))) {
                 mkdir(dirname($filePath), 0755, true);
             }
 
@@ -336,21 +338,21 @@ class PersonController extends Controller
             Log::info('✅ Plantilla generada exitosamente');
 
         } catch (\Exception $e) {
-            Log::error('❌ Error al generar plantilla: ' . $e->getMessage());
+            Log::error('❌ Error al generar plantilla: '.$e->getMessage());
             throw $e;
         }
     }
 
     public function edit(Person $person)
     {
-        $user  = Auth::user();
+        $user = Auth::user();
         $areas = Area::all();
 
         if ($user->role?->name === 'Administrador' && $user->area_id) {
             $areas = Area::where('id', $user->area_id)->get();
         } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
             $subarea = $user->subarea;
-            $areas   = Area::where('id', $subarea->area_id)->get();
+            $areas = Area::where('id', $subarea->area_id)->get();
         }
 
         return view('persons.edit', compact('person', 'areas'));
@@ -362,14 +364,14 @@ class PersonController extends Controller
         $request->merge(['email' => strtolower(trim($request->email))]);
 
         $data = $request->validate([
-            'dni'       => 'required|string|unique:persons,dni,' . $person->id,
-            'apellido'  => 'required|string|max:255',
-            'nombre'    => 'required|string|max:255',
-            'titulo'    => 'nullable|string|max:255',
+            'dni' => 'required|string|unique:persons,dni,'.$person->id,
+            'apellido' => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
+            'titulo' => 'nullable|string|max:255',
             'domicilio' => 'nullable|string|max:255',
-            'telefono'  => 'nullable|string|max:255',
-            'email'     => 'required|email|unique:persons,email,' . $person->id,
-            'area_id'   => 'required|exists:areas,id',
+            'telefono' => 'nullable|string|max:255',
+            'email' => 'required|email|unique:persons,email,'.$person->id,
+            'area_id' => 'required|exists:areas,id',
         ]);
 
         $person->update($data);
@@ -386,15 +388,16 @@ class PersonController extends Controller
     public function updateProfile(Request $request)
     {
         $person = Auth::user()->person;
-        $data   = $request->validate([
-            'dni'       => 'required|string|unique:persons,dni,' . $person->id,
-            'apellido'  => 'required|string|max:255',
-            'nombre'    => 'required|string|max:255',
-            'titulo'    => 'nullable|string|max:255',
+        $data = $request->validate([
+            'dni' => 'required|string|unique:persons,dni,'.$person->id,
+            'apellido' => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
+            'titulo' => 'nullable|string|max:255',
             'domicilio' => 'nullable|string|max:255',
-            'telefono'  => 'nullable|string|max:255',
+            'telefono' => 'nullable|string|max:255',
         ]);
         $person->update($data);
+
         return redirect()->route('profile.edit')->with('success', 'Datos personales actualizados.');
     }
 
@@ -405,6 +408,7 @@ class PersonController extends Controller
                 ->with('error', 'No se puede eliminar esta persona porque tiene certificados asociados.');
         }
         $person->delete();
+
         return redirect()->route('persons.index')->with('success', 'Persona eliminada exitosamente.');
     }
 
@@ -428,13 +432,14 @@ class PersonController extends Controller
                     ->where('areas.id', $user->area_id)
                     ->exists();
 
-                if (!$pertenece) {
+                if (! $pertenece) {
                     continue;
                 }
             }
 
             if ($person->certificates()->count() > 0) {
                 $error = true;
+
                 continue;
             }
 

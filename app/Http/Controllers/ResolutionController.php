@@ -2,14 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Area;
 use App\Models\Resolution;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\Auth;
-use App\Models\User;
-use App\Models\Area;
-
 
 class ResolutionController extends Controller
 {
@@ -18,7 +16,7 @@ class ResolutionController extends Controller
      */
     public function index(Request $request)
     {
-        $user  = Auth::user();
+        $user = Auth::user();
         $query = Resolution::query();
 
         // Root ve todas
@@ -35,13 +33,14 @@ class ResolutionController extends Controller
 
         // ✅ Filtros de búsqueda
         if ($request->filled('numero')) {
-            $query->where('numero', 'like', '%' . $request->numero . '%');
+            $query->where('numero', 'like', '%'.$request->numero.'%');
         }
         if ($request->filled('anio')) {
             $query->where('anio', $request->anio);
         }
 
         $resolutions = $query->latest()->paginate(10)->withQueryString();
+
         return view('resolutions.index', compact('resolutions'));
     }
 
@@ -55,7 +54,7 @@ class ResolutionController extends Controller
             $areas = Area::where('id', $user->area_id)->get();
         } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
             $subarea = $user->subarea;
-            $areas   = Area::where('id', $subarea->area_id)->get();
+            $areas = Area::where('id', $subarea->area_id)->get();
         } else {
             $areas = collect();
         }
@@ -101,10 +100,10 @@ class ResolutionController extends Controller
             'area' => $area->nombre,
             'pdf_path' => $filePath,
         ]);
+
         return redirect()->route('resolutions.index')
             ->with('success', 'Resolución creada exitosamente.');
     }
-
 
     public function edit(Resolution $resolution)
     {
@@ -124,7 +123,7 @@ class ResolutionController extends Controller
             $areas = Area::where('id', $user->area_id)->get();
         } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
             $subarea = $user->subarea;
-            $areas   = Area::where('id', $subarea->area_id)->get();
+            $areas = Area::where('id', $subarea->area_id)->get();
         } else {
             $areas = collect();
         }
@@ -165,6 +164,7 @@ class ResolutionController extends Controller
             $data['pdf_path'] = $request->file('pdf_file')->store('resolutions', 'public');
         }
         $resolution->update($data);
+
         return redirect()->route('resolutions.index')
             ->with('success', 'Resolución actualizada exitosamente.');
     }
