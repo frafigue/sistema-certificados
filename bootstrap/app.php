@@ -15,6 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'is.root' => \App\Http\Middleware\IsRoot::class,
             // ✅ NUEVO: middleware para bloquear usuarios inactivos
             'check.activo' => \App\Http\Middleware\CheckUserActivo::class,
+            // ✅ NUEVO: restringir rutas por rol (role:Root,Administrador,Gestor)
+            'role' => \App\Http\Middleware\EnsureRole::class,
         ]);
 
         // ✅ NUEVO: aplicar a todas las rutas web protegidas

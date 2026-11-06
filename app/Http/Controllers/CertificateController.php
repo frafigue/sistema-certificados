@@ -1059,6 +1059,19 @@ HTML;
 
     public function downloadPdf(Certificate $certificate)
     {
+        $user = Auth::user();
+        $rol = $user->role?->name;
+
+        $autorizado = match ($rol) {
+            'Root' => true,
+            'Administrador' => $user->area_id && $certificate->course?->area_id == $user->area_id,
+            'Gestor' => $user->subarea_id && $certificate->course?->subarea_id == $user->subarea_id,
+            'Persona' => $user->person && $certificate->person_id == $user->person->id,
+            default => false,
+        };
+
+        abort_unless($autorizado, 403, 'No tienes permisos para descargar este certificado.');
+
         $path = Storage::disk('public')->path($certificate->pdf_path);
 
         if (! file_exists($path)) {
