@@ -115,7 +115,7 @@ class UnifiedImportController extends Controller
 
         $user = Auth::user();
         $query = Area::query();
-        if ($user->role?->name === 'Administrador' && $user->area_id) {
+        if ($user->area_id && ($user->esAdministrador() || $user->esGestor())) {
             $query->where('id', $user->area_id);
         }
         $areas = $query->get();

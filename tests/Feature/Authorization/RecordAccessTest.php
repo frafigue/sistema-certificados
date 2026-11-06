@@ -269,6 +269,46 @@ test('la importacion de certificados rechaza cursos fuera de alcance', function 
     expect(Certificate::where('unique_code', 'CUV-FUERA-DE-ALCANCE')->exists())->toBeFalse();
 });
 
+test('gestor no genera certificados fuera de su alcance', function () {
+    $payload = [
+        'condition' => 'Aprobado',
+        'unidad_academica' => 'Unidad',
+        'subarea' => 'Subarea',
+        'iniciales' => 'AB',
+        'anio' => '2026',
+    ];
+
+    $this->actingAs($this->gestorA)
+        ->post(route('certificates.store'), $payload + [
+            'course_id' => $this->cursoB1->id,
+            'person_id' => $this->personaA1->id,
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($this->gestorA)
+        ->post(route('certificates.store'), $payload + [
+            'course_id' => $this->cursoA1->id,
+            'person_id' => $this->personaA2->id,
+        ])
+        ->assertForbidden();
+
+    expect(Certificate::count())->toBe(0);
+});
+
+test('el listado de personas del curso respeta la subarea del gestor', function () {
+    $response = $this->actingAs($this->gestorA)
+        ->get(route('courses.get_persons', $this->cursoA1->id));
+
+    $response->assertOk();
+
+    $ids = collect($response->json('persons'))->pluck('id');
+
+    expect($ids)->toContain($this->personaA1->id);
+    expect($ids)->not->toContain($this->personaA2->id);
+    expect($ids)->not->toContain($this->personaB1->id);
+    expect($response->json('total_area'))->toBe(1);
+});
+
 test('la descarga de certificados usa la misma regla de alcance', function () {
     $certificadoB1 = Certificate::create([
         'course_id' => $this->cursoB1->id,

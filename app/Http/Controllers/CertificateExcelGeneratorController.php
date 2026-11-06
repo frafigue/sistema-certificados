@@ -87,9 +87,19 @@ class CertificateExcelGeneratorController extends Controller
             return back()->withErrors(['course_id' => 'No tenés permisos para este curso.']);
         }
 
-        $persons = Person::whereHas('areas', function ($q) use ($course) {
-            $q->where('areas.id', $course->area_id);
-        })
+        $personsQuery = Person::query();
+
+        if ($user->esGestor() && $user->subarea_id) {
+            $personsQuery->where('subarea_id', $user->subarea_id);
+        } else {
+            $personsQuery->where(function ($q) use ($course) {
+                $q->whereHas('areas', function ($sub) use ($course) {
+                    $sub->where('areas.id', $course->area_id);
+                })->orWhere('area_id', $course->area_id);
+            });
+        }
+
+        $persons = $personsQuery
             ->orderBy('apellido')
             ->orderBy('nombre')
             ->get();

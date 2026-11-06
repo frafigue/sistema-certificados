@@ -7,6 +7,7 @@ use App\Imports\CertificatesImport;
 use App\Models\Certificate;
 use App\Models\Course;
 use App\Models\Person;
+use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use iio\libmergepdf\Merger;
 use Illuminate\Http\Request;
@@ -469,26 +470,38 @@ HTML;
         set_time_limit(300);
         ini_set('memory_limit', '512M');
 
+        $user = Auth::user();
+        if (! $user->role || ! in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
+            abort(403, 'No tienes permisos para crear certificados.');
+        }
+
+        $request->validate([
+            'course_id' => 'required|exists:courses,id',
+            'person_id' => 'required|exists:persons,id',
+            'condition' => 'required|string|min:3|max:100|regex:/^[\pL\s\-]+$/u',
+            'nota' => 'nullable|numeric|min:0',
+            'unidad_academica' => 'required|string|max:255',
+            'subarea' => 'required|string|max:255',
+            'iniciales' => 'required|string|max:255',
+            'anio' => 'required|digits:4|integer|min:2000|max:2099',
+        ]);
+
+        $course = Course::with(['resolution', 'area', 'responsables'])->findOrFail($request->course_id);
+        $person = Person::findOrFail($request->person_id);
+
+        abort_unless(
+            $user->puedeGestionarCurso($course),
+            403,
+            'No tienes permisos para generar certificados en este curso.'
+        );
+
+        abort_unless(
+            $user->puedeGestionarPersona($person),
+            403,
+            'No tienes permisos para generar certificados a esta persona.'
+        );
+
         try {
-            $user = Auth::user();
-            if (! $user->role || ! in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
-                abort(403, 'No tienes permisos para crear certificados.');
-            }
-
-            $request->validate([
-                'course_id' => 'required|exists:courses,id',
-                'person_id' => 'required|exists:persons,id',
-                'condition' => 'required|string|min:3|max:100|regex:/^[\pL\s\-]+$/u',
-                'nota' => 'nullable|numeric|min:0',
-                'unidad_academica' => 'required|string|max:255',
-                'subarea' => 'required|string|max:255',
-                'iniciales' => 'required|string|max:255',
-                'anio' => 'required|digits:4|integer|min:2000|max:2099',
-            ]);
-
-            $course = Course::with(['resolution', 'area', 'responsables'])->findOrFail($request->course_id);
-            $person = Person::findOrFail($request->person_id);
-
             $unidadAcademica = $this->generarSigla($request->unidad_academica);
             $subarea = $this->generarSigla($request->subarea);
             $areaCode = $this->generarSigla($course->area->nombre ?? '');
@@ -611,17 +624,11 @@ HTML;
 
     public function show(Certificate $certificate)
     {
-        $user = Auth::user();
-
-        if ($user->role && $user->role->name === 'Administrador') {
-            if ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
-                abort(403, 'No tienes permisos para ver este certificado.');
-            }
-        } elseif ($user->role && $user->role->name !== 'Root') {
-            if (! $user->person || $certificate->person_id != $user->person->id) {
-                abort(403, 'No tienes permisos para ver este certificado.');
-            }
-        }
+        abort_unless(
+            Auth::user()->puedeGestionarCertificado($certificate),
+            403,
+            'No tienes permisos para ver este certificado.'
+        );
 
         return view('certificates.show', compact('certificate'));
     }
@@ -677,7 +684,7 @@ HTML;
             abort(403, 'No tienes permisos para editar este certificado.');
         }
 
-        $people = Person::orderBy('apellido')->get();
+        $people = $this->personasPermitidas($user)->orderBy('apellido')->get();
 
         if ($user->role->name === 'Root') {
             $courses = Course::orderBy('nombre')->get();
@@ -700,9 +707,11 @@ HTML;
             abort(403, 'No tienes permisos para actualizar certificados.');
         }
 
-        if ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
-            abort(403, 'No tienes permisos para actualizar este certificado.');
-        }
+        abort_unless(
+            $user->puedeGestionarCertificado($certificate),
+            403,
+            'No tienes permisos para actualizar este certificado.'
+        );
 
         $request->validate([
             'course_id' => 'required|exists:courses,id',
@@ -713,11 +722,19 @@ HTML;
 
         $course = Course::with(['responsables'])->findOrFail($request->course_id);
 
-        if ($user->role->name !== 'Root' && $user->area_id && $course->area_id != $user->area_id) {
-            return redirect()->back()
-                ->withErrors(['course_id' => 'No puedes asignar cursos fuera de tu área.'])
-                ->withInput();
-        }
+        abort_unless(
+            $user->puedeGestionarCurso($course),
+            403,
+            'No tienes permisos para usar este curso.'
+        );
+
+        $person = Person::findOrFail($request->person_id);
+
+        abort_unless(
+            $user->puedeGestionarPersona($person),
+            403,
+            'No tienes permisos para usar esta persona.'
+        );
 
         if ($certificate->pdf_path) {
             Storage::disk('public')->delete($certificate->pdf_path);
@@ -732,7 +749,6 @@ HTML;
             storage_path('app/public/'.$qrPath)
         );
 
-        $person = Person::find($request->person_id);
         $data = [
             'person' => $person,
             'course' => $course,
@@ -766,21 +782,11 @@ HTML;
     {
         $user = Auth::user();
 
-        if (! $user->role || ! in_array($user->role->name, ['Root', 'Administrador', 'Gestor'])) {
-            abort(403, 'No tienes permisos para eliminar certificados.');
-        }
-
-        if ($user->role->name === 'Gestor' && $user->subarea_id) {
-            if ($certificate->course->subarea_id != $user->subarea_id) {
-                abort(403, 'No tienes permisos para eliminar este certificado.');
-            }
-        } elseif ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
-            abort(403, 'No tienes permisos para eliminar este certificado.');
-        }
-
-        if ($user->role->name !== 'Root' && $user->area_id && $certificate->course->area_id != $user->area_id) {
-            abort(403, 'No tienes permisos para eliminar este certificado.');
-        }
+        abort_unless(
+            $user->puedeGestionarCertificado($certificate),
+            403,
+            'No tienes permisos para eliminar este certificado.'
+        );
 
         if ($certificate->pdf_path) {
             Storage::disk('public')->delete($certificate->pdf_path);
@@ -827,9 +833,15 @@ HTML;
         }
 
         $certificatesCreated = 0;
+        $user = Auth::user();
 
         foreach ($importData as $row) {
             $course = Course::with(['resolution', 'area', 'responsables'])->where('nombre', $row['curso'])->first();
+
+            if (! $course || ! $user->puedeGestionarCurso($course)) {
+                continue;
+            }
+
             $person = Person::firstOrCreate(
                 ['dni' => $row['dni']],
                 [
@@ -841,10 +853,6 @@ HTML;
                     'email' => $row['dni'].'@email-temporal.com',
                 ]
             );
-
-            if (! $course) {
-                continue;
-            }
 
             $uniqueCode = $row['cuv'];
             $qrPath = 'qrcodes/'.$uniqueCode.'.svg';
@@ -895,7 +903,7 @@ HTML;
             $htmlBack = null;
 
             if ($templateBack) {
-                $designBack = $this->extractDesignFromTemplate($area->template_back ?? '');
+                $designBack = $this->extractDesignFromTemplate($course->area->template_back ?? '');
                 $backIsEmpty = $designBack && empty($designBack['elements']) && empty($designBack['background']);
                 if (! $backIsEmpty) {
                     $htmlBack = Blade::render($templateBack, $data);
@@ -952,6 +960,11 @@ HTML;
 
         $firstRow = $importData[0];
         $course = Course::with(['resolution', 'area', 'responsables'])->where('nombre', $firstRow['curso'])->first();
+
+        if (! $course || ! Auth::user()->puedeGestionarCurso($course)) {
+            abort(403, 'No tienes permisos para previsualizar este curso.');
+        }
+
         $person = Person::firstOrCreate(
             ['dni' => $firstRow['dni']],
             [
@@ -964,7 +977,7 @@ HTML;
             ]
         );
 
-        if (! $course || ! $person) {
+        if (! $person) {
             return redirect()->route('certificates.import.preview')
                 ->with('import_errors', ['No se pudieron encontrar los datos para generar la vista previa.']);
         }
@@ -1091,20 +1104,19 @@ HTML;
         );
 
         $course->load('area');
+        $user = Auth::user();
 
         $personasConCertificado = Certificate::where('course_id', $course->id)
             ->pluck('person_id')->toArray();
 
-        $persons = Person::whereHas('areas', function ($q) use ($course) {
-            $q->where('areas.id', $course->area_id);
-        })
+        $baseQuery = $this->personasPermitidas($user, $course);
+
+        $persons = (clone $baseQuery)
             ->whereNotIn('id', $personasConCertificado)
             ->orderBy('apellido')
             ->get(['id', 'nombre', 'apellido', 'dni']);
 
-        $totalArea = Person::whereHas('areas', function ($q) use ($course) {
-            $q->where('areas.id', $course->area_id);
-        })->count();
+        $totalArea = (clone $baseQuery)->count();
 
         return response()->json([
             'persons' => $persons,
@@ -1124,13 +1136,14 @@ HTML;
 
         $course->load('area');
         $search = $request->get('q', '');
+        $user = Auth::user();
 
         $personasConCertificado = Certificate::where('course_id', $course->id)
             ->pluck('person_id')->toArray();
 
-        $persons = Person::whereHas('areas', function ($q) use ($course) {
-            $q->where('areas.id', $course->area_id);
-        })
+        $baseQuery = $this->personasPermitidas($user, $course);
+
+        $persons = (clone $baseQuery)
             ->whereNotIn('id', $personasConCertificado)
             ->where(function ($query) use ($search) {
                 $query->where('nombre', 'like', '%'.$search.'%')
@@ -1153,10 +1166,46 @@ HTML;
 
         return response()->json([
             'results' => $results,
-            'total_area' => Person::whereHas('areas', function ($q) use ($course) {
-                $q->where('areas.id', $course->area_id);
-            })->count(),
+            'total_area' => (clone $baseQuery)->count(),
             'area_name' => $course->area->nombre ?? '',
         ]);
+    }
+
+    /**
+     * Personas que el usuario puede ver o seleccionar según su rol.
+     * Root: todo (o el área del curso). Administrador: su área.
+     * Gestor: su subárea. Cualquier otro rol: nada.
+     */
+    private function personasPermitidas(?User $user, ?Course $course = null)
+    {
+        $query = Person::query();
+
+        if (! $user) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        if ($user->esRoot()) {
+            if ($course) {
+                $query->whereHas('areas', function ($q) use ($course) {
+                    $q->where('areas.id', $course->area_id);
+                });
+            }
+
+            return $query;
+        }
+
+        if ($user->esAdministrador() && $user->area_id) {
+            return $query->where(function ($q) use ($user) {
+                $q->whereHas('areas', function ($sub) use ($user) {
+                    $sub->where('areas.id', $user->area_id);
+                })->orWhere('area_id', $user->area_id);
+            });
+        }
+
+        if ($user->esGestor() && $user->subarea_id) {
+            return $query->where('subarea_id', $user->subarea_id);
+        }
+
+        return $query->whereRaw('1 = 0');
     }
 }

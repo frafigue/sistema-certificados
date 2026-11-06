@@ -240,13 +240,25 @@ class PersonsImport implements ToCollection, WithHeadingRow
                 return;
             }
 
-            if ($this->currentUser->role->name === 'Administrador' && $this->currentUser->area_id != $area->id) {
+            if ($this->currentUser && ! $this->currentUser->puedeGestionarArea((int) $area->id)) {
                 $this->errors[] = ['fila' => $rowNumber, 'errores' => ["No tenés permisos para asignar personas al área '{$areaNombre}'"], 'valores' => [$dni, $apellido, $nombre, $areaNombre]];
 
                 return;
             }
 
             $existingPerson = $this->personsCache[$dni] ?? null;
+
+            // Un Gestor solo puede operar sobre personas de su subárea.
+            // Evita que una planilla modifique datos de otra subárea.
+            if (
+                $existingPerson &&
+                $this->currentUser?->esGestor() &&
+                ! $this->currentUser->puedeGestionarPersona($existingPerson)
+            ) {
+                $this->errors[] = ['fila' => $rowNumber, 'errores' => ["No tenés permisos para importar a la persona con DNI {$dni} porque pertenece a otra subárea"], 'valores' => [$dni, $apellido, $nombre, $areaNombre]];
+
+                return;
+            }
 
             $data = [
                 'dni' => $dni,
@@ -414,6 +426,7 @@ class PersonsImport implements ToCollection, WithHeadingRow
             'telefono' => $data['telefono'] ?: null,
             'email' => $data['email'],
             'area_id' => $data['area_id'],
+            'subarea_id' => $person->subarea_id,
             'updated_at' => now(),
         ];
 

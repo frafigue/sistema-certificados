@@ -300,7 +300,7 @@ class PersonController extends Controller
 
             $user = Auth::user();
             $areasQuery = Area::query();
-            if ($user->role?->name === 'Administrador' && $user->area_id) {
+            if ($user->area_id && ($user->esAdministrador() || $user->esGestor())) {
                 $areasQuery->where('id', $user->area_id);
             }
 

@@ -157,8 +157,7 @@ class PersonsSheetImport implements ToCollection, WithHeadingRow
 
             if (
                 $this->currentUser &&
-                $this->currentUser->role?->name === 'Administrador' &&
-                $this->currentUser->area_id != $area['id']
+                ! $this->currentUser->puedeGestionarArea((int) $area['id'])
             ) {
                 $this->addError($rowNumber, "Sin permisos para el área '{$areaNombre}'", [$dni]);
 
@@ -177,6 +176,7 @@ class PersonsSheetImport implements ToCollection, WithHeadingRow
                 'telefono' => $telefono ?: null,
                 'email' => $email,
                 'area_id' => $area['id'],
+                'subarea_id' => $this->currentUser?->esGestor() ? $this->currentUser->subarea_id : null,
             ];
 
             if (isset($this->personsCache[$dni])) {
@@ -251,6 +251,15 @@ class PersonsSheetImport implements ToCollection, WithHeadingRow
 
         foreach ($persons as $person) {
             try {
+                // La persona recién creada siempre debe quedar vinculada
+                // a su área, exista o no un usuario asociado.
+                \DB::table('area_person')->insertOrIgnore([
+                    'person_id' => $person->id,
+                    'area_id' => $person->area_id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
                 if ($person->user_id) {
                     continue;
                 }
