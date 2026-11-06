@@ -10,20 +10,37 @@ class ImportHistoryController extends Controller
     public function index()
     {
         $user = Auth::user();
-        $query = ImportHistory::with('user')->latest();
 
-        // Filtrar por área si es Administrador
-        if ($user->role?->name === 'Administrador' && $user->area_id) {
-            $query->where('user_id', $user->id);
-        }
+        $alcance = function ($query) use ($user) {
+            if ($user->esRoot()) {
+                return;
+            }
+
+            if ($user->esAdministrador() && $user->area_id) {
+                $query->whereHas('user', function ($q) use ($user) {
+                    $q->where('area_id', $user->area_id);
+                });
+
+                return;
+            }
+
+            if ($user->esGestor()) {
+                $query->where('user_id', $user->id);
+
+                return;
+            }
+
+            $query->whereRaw('1 = 0');
+        };
+
+        $query = ImportHistory::with('user')->latest();
+        $alcance($query);
 
         $imports = $query->paginate(15);
 
         // Totales reales (no paginados)
         $totalsQuery = ImportHistory::query();
-        if ($user->role?->name === 'Administrador' && $user->area_id) {
-            $totalsQuery->where('user_id', $user->id);
-        }
+        $alcance($totalsQuery);
 
         $totals = [
             'total' => $totalsQuery->count(),
@@ -39,13 +56,11 @@ class ImportHistoryController extends Controller
     {
         $user = Auth::user();
 
-        // Verificar permisos
-        if (
-            $user->role?->name === 'Administrador' &&
-            $importHistory->user_id !== $user->id
-        ) {
-            abort(403, 'No tenés permisos para ver esta importación.');
-        }
+        abort_unless(
+            $user->puedeVerImportacion($importHistory),
+            403,
+            'No tenés permisos para ver esta importación.'
+        );
 
         $importHistory->load([
             'user',

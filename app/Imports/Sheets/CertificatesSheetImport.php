@@ -3,6 +3,7 @@
 namespace App\Imports\Sheets;
 
 use App\Jobs\GenerateCertificateJob;
+use App\Models\Course;
 use App\Models\ImportHistory;
 use Illuminate\Bus\Batch;
 use Illuminate\Support\Collection;
@@ -25,6 +26,7 @@ class CertificatesSheetImport implements ToCollection, WithCalculatedFormulas, W
     public function collection(Collection $rows)
     {
         $jobs = [];
+        $user = Auth::user();
 
         // =========================================================
         // 🔥 CREAR HISTORIAL IMPORTACIÓN
@@ -82,6 +84,32 @@ class CertificatesSheetImport implements ToCollection, WithCalculatedFormulas, W
                 ) {
                     continue;
                 }
+
+                // =========================================================
+                // 🔥 ALCANCE: el curso debe pertenecer al área o subárea
+                // =========================================================
+                $courseQuery = Course::where('nombre', trim($data['curso']));
+
+                if ($user?->esAdministrador() && $user->area_id) {
+                    $courseQuery->where('area_id', $user->area_id);
+                } elseif ($user?->esGestor() && $user->subarea_id) {
+                    $courseQuery->where('subarea_id', $user->subarea_id);
+                } elseif (! $user?->esRoot()) {
+                    $courseQuery->whereRaw('1 = 0');
+                }
+
+                $course = $courseQuery->first();
+
+                if (! $course) {
+                    $this->errors[] = [
+                        'row' => $index,
+                        'error' => 'Curso no encontrado o fuera de tu alcance: '.$data['curso'],
+                    ];
+
+                    continue;
+                }
+
+                $data['course_id'] = $course->id;
 
                 // =========================================================
                 // 🔥 AGREGAR JOB

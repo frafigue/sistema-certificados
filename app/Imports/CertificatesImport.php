@@ -8,6 +8,7 @@ use App\Models\Course;
 use App\Models\Person;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +29,8 @@ class CertificatesImport implements ToCollection, WithCalculatedFormulas, WithHe
         ini_set('memory_limit', '512M');
         set_time_limit(0);
 
+        $user = Auth::user();
+
         foreach ($rows as $rowIndex => $row) {
             try {
 
@@ -47,11 +50,22 @@ class CertificatesImport implements ToCollection, WithCalculatedFormulas, WithHe
                     continue;
                 }
 
-                $course = Course::with(['area'])
-                    ->where('nombre', trim($cursoNombre))
-                    ->first();
+                $courseQuery = Course::with(['area'])
+                    ->where('nombre', trim($cursoNombre));
+
+                if ($user?->esAdministrador() && $user->area_id) {
+                    $courseQuery->where('area_id', $user->area_id);
+                } elseif ($user?->esGestor() && $user->subarea_id) {
+                    $courseQuery->where('subarea_id', $user->subarea_id);
+                } elseif (! $user?->esRoot()) {
+                    $courseQuery->whereRaw('1 = 0');
+                }
+
+                $course = $courseQuery->first();
 
                 if (! $course) {
+                    $this->errors[] = 'Fila '.($rowIndex + 2).': curso no encontrado o fuera de tu alcance ('.$cursoNombre.').';
+
                     continue;
                 }
 
@@ -77,6 +91,7 @@ class CertificatesImport implements ToCollection, WithCalculatedFormulas, WithHe
                         'apellido' => $cleanedRow['apellido'] ?? 'N/A',
                         'nombre' => $cleanedRow['nombre'] ?? 'N/A',
                         'email' => $dni.'@tmp.com',
+                        'area_id' => $course->area_id,
                     ]
                 );
 

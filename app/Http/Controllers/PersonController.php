@@ -22,8 +22,10 @@ class PersonController extends Controller
         $query = Person::query();
 
         if ($user->role?->name === 'Administrador' && $user->area_id) {
-            $query->whereHas('areas', function ($q) use ($user) {
-                $q->where('areas.id', $user->area_id);
+            $query->where(function ($q) use ($user) {
+                $q->whereHas('areas', function ($sub) use ($user) {
+                    $sub->where('areas.id', $user->area_id);
+                })->orWhere('area_id', $user->area_id);
             });
         } elseif ($user->role?->name === 'Gestor' && $user->subarea_id) {
             $query->where('subarea_id', $user->subarea_id);
@@ -74,6 +76,12 @@ class PersonController extends Controller
             'email' => 'required|email',
             'area_id' => 'required|exists:areas,id',
         ]);
+
+        if (! $user->puedeGestionarArea((int) $data['area_id'])) {
+            return back()
+                ->withErrors(['area_id' => 'No tienes permisos para registrar personas en esta área.'])
+                ->withInput();
+        }
 
         $existingPerson = Person::where('dni', $data['dni'])->first();
 
@@ -343,10 +351,27 @@ class PersonController extends Controller
         }
     }
 
+    public function show(Person $person)
+    {
+        abort_unless(
+            Auth::user()->puedeGestionarPersona($person),
+            403,
+            'No tienes permisos para ver esta persona.'
+        );
+
+        return redirect()->route('persons.edit', $person);
+    }
+
     public function edit(Person $person)
     {
         $user = Auth::user();
         $areas = Area::all();
+
+        abort_unless(
+            $user->puedeGestionarPersona($person),
+            403,
+            'No tienes permisos para editar esta persona.'
+        );
 
         if ($user->role?->name === 'Administrador' && $user->area_id) {
             $areas = Area::where('id', $user->area_id)->get();
@@ -361,6 +386,13 @@ class PersonController extends Controller
     public function update(Request $request, Person $person)
     {
         $user = Auth::user();
+
+        abort_unless(
+            $user->puedeGestionarPersona($person),
+            403,
+            'No tienes permisos para actualizar esta persona.'
+        );
+
         $request->merge(['email' => strtolower(trim($request->email))]);
 
         $data = $request->validate([
@@ -373,6 +405,12 @@ class PersonController extends Controller
             'email' => 'required|email|unique:persons,email,'.$person->id,
             'area_id' => 'required|exists:areas,id',
         ]);
+
+        if (! $user->puedeGestionarArea((int) $data['area_id'])) {
+            return back()
+                ->withErrors(['area_id' => 'No tienes permisos para mover esta persona a otra área.'])
+                ->withInput();
+        }
 
         $person->update($data);
 
@@ -403,6 +441,12 @@ class PersonController extends Controller
 
     public function destroy(Person $person)
     {
+        abort_unless(
+            Auth::user()->puedeGestionarPersona($person),
+            403,
+            'No tienes permisos para eliminar esta persona.'
+        );
+
         if ($person->certificates()->count() > 0) {
             return redirect()->route('persons.index')
                 ->with('error', 'No se puede eliminar esta persona porque tiene certificados asociados.');
@@ -427,14 +471,8 @@ class PersonController extends Controller
 
         foreach ($persons as $person) {
 
-            if ($user->role?->name === 'Administrador') {
-                $pertenece = $person->areas()
-                    ->where('areas.id', $user->area_id)
-                    ->exists();
-
-                if (! $pertenece) {
-                    continue;
-                }
+            if (! $user->puedeGestionarPersona($person)) {
+                continue;
             }
 
             if ($person->certificates()->count() > 0) {

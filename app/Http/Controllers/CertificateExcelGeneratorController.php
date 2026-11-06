@@ -52,8 +52,13 @@ class CertificateExcelGeneratorController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->role?->name === 'Root') {
+        if ($user->esRoot()) {
             $courses = Course::with('area')->orderBy('nombre')->get();
+        } elseif ($user->esGestor() && $user->subarea_id) {
+            $courses = Course::with('area')
+                ->where('subarea_id', $user->subarea_id)
+                ->orderBy('nombre')
+                ->get();
         } else {
             $courses = Course::with('area')
                 ->where('area_id', $user->area_id)
@@ -78,7 +83,7 @@ class CertificateExcelGeneratorController extends Controller
         $user = Auth::user();
         $course = Course::with('area')->findOrFail($request->course_id);
 
-        if ($user->role?->name !== 'Root' && $course->area_id != $user->area_id) {
+        if (! $user->puedeGestionarCurso($course)) {
             return back()->withErrors(['course_id' => 'No tenés permisos para este curso.']);
         }
 
@@ -123,6 +128,12 @@ class CertificateExcelGeneratorController extends Controller
 
     public function getCourseInfo(Course $course)
     {
+        abort_unless(
+            Auth::user()->puedeGestionarCurso($course),
+            403,
+            'No tenés permisos para consultar este curso.'
+        );
+
         $course->load('area');
 
         return response()->json([

@@ -44,7 +44,9 @@ class GenerateCertificateJob implements ShouldQueue
             }
 
             // 🔍 Buscar datos
-            $course = Course::where('nombre', $this->row['curso'])->first();
+            $course = ! empty($this->row['course_id'])
+                ? Course::find($this->row['course_id'])
+                : Course::where('nombre', $this->row['curso'])->first();
             $person = Person::where('dni', $this->row['dni'])->first();
 
             if (! $course || ! $person) {

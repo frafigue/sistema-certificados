@@ -998,6 +998,12 @@ HTML;
 
     public function getAreaByCourse(Course $course)
     {
+        abort_unless(
+            Auth::user()->puedeGestionarCurso($course),
+            403,
+            'No tienes permisos para consultar este curso.'
+        );
+
         $course->load('area');
 
         return response()->json(['area_name' => $course->area->nombre ?? 'Sin Área Definida']);
@@ -1060,17 +1066,12 @@ HTML;
     public function downloadPdf(Certificate $certificate)
     {
         $user = Auth::user();
-        $rol = $user->role?->name;
 
-        $autorizado = match ($rol) {
-            'Root' => true,
-            'Administrador' => $user->area_id && $certificate->course?->area_id == $user->area_id,
-            'Gestor' => $user->subarea_id && $certificate->course?->subarea_id == $user->subarea_id,
-            'Persona' => $user->person && $certificate->person_id == $user->person->id,
-            default => false,
-        };
-
-        abort_unless($autorizado, 403, 'No tienes permisos para descargar este certificado.');
+        abort_unless(
+            $user->puedeGestionarCertificado($certificate),
+            403,
+            'No tienes permisos para descargar este certificado.'
+        );
 
         $path = Storage::disk('public')->path($certificate->pdf_path);
 
@@ -1083,6 +1084,12 @@ HTML;
 
     public function getPersonsByCourse(Course $course)
     {
+        abort_unless(
+            Auth::user()->puedeGestionarCurso($course),
+            403,
+            'No tienes permisos para consultar este curso.'
+        );
+
         $course->load('area');
 
         $personasConCertificado = Certificate::where('course_id', $course->id)
@@ -1109,6 +1116,12 @@ HTML;
 
     public function searchPersonsByCourse(Request $request, Course $course)
     {
+        abort_unless(
+            Auth::user()->puedeGestionarCurso($course),
+            403,
+            'No tienes permisos para consultar este curso.'
+        );
+
         $course->load('area');
         $search = $request->get('q', '');
 
