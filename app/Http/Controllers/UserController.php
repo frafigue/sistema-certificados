@@ -189,6 +189,15 @@ class UserController extends Controller
             'password' => ['nullable', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
         ]);
 
+        if (! $currentUser->esRoot() && $request->subarea_id) {
+            $subarea = Subarea::find($request->subarea_id);
+            if (! $subarea || (int) $subarea->area_id !== (int) $currentUser->area_id) {
+                return back()
+                    ->withErrors(['subarea_id' => 'La subárea no pertenece a tu área.'])
+                    ->withInput();
+            }
+        }
+
         $data = $request->only('name', 'email', 'role_id', 'area_id', 'subarea_id');
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
@@ -258,6 +267,14 @@ class UserController extends Controller
 
     public function reactivar(User $user)
     {
+        $currentUser = auth()->user();
+
+        if (! $currentUser->esRoot()) {
+            if ($user->role?->name !== 'Gestor' || (int) $user->area_id !== (int) $currentUser->area_id) {
+                abort(403, 'No tienes permisos para reactivar este usuario.');
+            }
+        }
+
         $user->update(['activo' => true]);
 
         return redirect()->route('users.index')

@@ -309,6 +309,31 @@ test('el listado de personas del curso respeta la subarea del gestor', function 
     expect($response->json('total_area'))->toBe(1);
 });
 
+test('un administrador no reactiva usuarios de otra area', function () {
+    $this->gestorB->update(['activo' => false]);
+
+    $this->actingAs($this->adminA)
+        ->patch(route('users.reactivar', $this->gestorB->id))
+        ->assertForbidden();
+
+    expect($this->gestorB->fresh()->activo)->toBeFalse();
+});
+
+test('un administrador no asigna a su gestor una subarea de otra area', function () {
+    $this->actingAs($this->adminA)
+        ->from(route('users.edit', $this->gestorA->id))
+        ->patch(route('users.update', $this->gestorA->id), [
+            'name' => $this->gestorA->name,
+            'email' => $this->gestorA->email,
+            'role_id' => Role::where('name', 'Gestor')->value('id'),
+            'area_id' => $this->areaA->id,
+            'subarea_id' => $this->subareaB1->id,
+        ])
+        ->assertSessionHasErrors('subarea_id');
+
+    expect((int) $this->gestorA->fresh()->subarea_id)->toBe($this->subareaA1->id);
+});
+
 test('la descarga de certificados usa la misma regla de alcance', function () {
     $certificadoB1 = Certificate::create([
         'course_id' => $this->cursoB1->id,
